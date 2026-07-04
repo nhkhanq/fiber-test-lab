@@ -14,39 +14,46 @@ tags: [backlog, tasks, tickets]
 
 ## EPIC E0 — Hands-on Foundation (required before any coding)
 
-**E0-1** · Install FNN binary + connect to CKB testnet Pudge · est 2
-- AC: `fnn` runs, connects to testnet, `get_node_info` returns a result.
+> Reworked after reading official docs: the fastest hands-on path is to clone `fiber-demo-startup`
+> (already dockerizes CKB dev chain + multiple FNN nodes) instead of installing everything from scratch.
+> `fnn-cli` uses subcommands: `fnn-cli info`, `fnn-cli peer list_peers`, `fnn-cli channel list_channels`.
 
-**E0-2** · Manually run `open_channel` with a public node · est 2
-- AC: a channel is opened, `list_channels` shows it in READY state.
+**E0-1** · Clone `fiber-demo-startup` (demo-0.8), `docker compose up`, all nodes healthy · est 2
+- AC: local CKB dev chain + Fiber nodes running via docker compose; can reach a node.
 
-**E0-3** · Manually run `new_invoice` + `send_payment` + `close_channel` · est 2
-- AC: send one payment through the channel, close the channel, record the exact request/response of each RPC.
+**E0-2** · Follow `fiber.world/docs/quick-start` (run-a-node, basic-transfer) hands-on · est 2
+- AC: read + run the official quick-start against the local nodes; understand the flow.
 
-**E0-4** · Write an "RPC notebook": method name + params + real response · est 1
-- AC: one note file listing the 6 core methods with real example params/responses (source of truth for later code).
+**E0-3** · Manually open a channel + send a payment + close, via `fnn-cli` / demo app · est 2
+- AC: one payment sent end-to-end; record the exact request/response of each RPC.
+
+**E0-4** · Write an "RPC notebook" from `fiber.world/docs/api-reference` + real responses · est 1
+- AC: note file listing the core methods (node info, open/list/close channel, new_invoice, send_payment) with real params/responses.
 
 **E0-5** · Force one error (send over capacity) + record raw error response · est 1
 - AC: at least one real raw error response captured to map against `ErrorCategory`.
 
 ---
 
-## EPIC E1 — Dockerize a single node (checkpoint: end of Day 5)
+## EPIC E1 — Adapt fiber-demo-startup base (checkpoint: end of Day 5)
 
-**E1-1** · Stand up `offckb` local devnet, faucet funds working · est 2
-- AC: devnet runs, faucet funds one address successfully.
+> No longer "dockerize from scratch" — the demo-startup compose already runs multi-node + CKB dev chain.
+> This epic = understand it, verify license, parametrize it for Test Lab.
 
-**E1-2** · Write Dockerfile / pick image to run one `fnn` in a container · est 3
-- AC: one `fnn` container starts and is healthy.
+**E1-1** · Check `fiber-demo-startup` license allows fork/build-on-top · est 1
+- AC: license confirmed; record decision in `decisions-log.md` (closes open question).
 
-**E1-3** · `fnn` container connects to `offckb` devnet · est 2
-- AC: `get_node_info` from the container returns, node sees the devnet.
+**E1-2** · Read + document the demo-startup compose (services, networks, ports, fund flow) · est 2
+- AC: short note mapping each service + how channels/funds are set up manually today.
 
-**E1-4** · Call RPC into the `fnn` container from host (temporary port map) · est 1
-- AC: a Node.js script calls `get_node_info` via `@ckb-ccc/fiber` successfully.
+**E1-3** · Reduce/parametrize compose to N nodes with run-id prefix (no host port clash) · est 3
+- AC: two `up` runs in parallel don't collide; network/containers carry run-id prefix.
 
-**E1-5** · [Decision] Decide: use existing FNN image or build our own · est 1
-- AC: update `decisions-log.md` + close the related open question.
+**E1-4** · Call RPC into a node from a host Node.js script via `@ckb-ccc/fiber` · est 1
+- AC: script calls node-info successfully against the running stack.
+
+**E1-5** · Confirm pinned FNN version (from demo-0.8) recorded · est 1
+- AC: version pinned in `package.json`/`scenario-catalog.md`; open question closed.
 
 ---
 
@@ -74,8 +81,8 @@ tags: [backlog, tasks, tickets]
 **E3-2** · `lib/scenario/loader.ts` — read YAML + zod validate, clear errors · est 2
 - AC: invalid file → prints failing field, exit 1; valid file → returns typed object.
 
-**E3-3** · `topology/compose.template.ts` — generate dynamic docker-compose from scenario + run-id · est 3
-- AC: given a scenario → outputs compose YAML with N nodes, network `flab_<run-id>`, prefixed containers.
+**E3-3** · `topology/compose.template.ts` — parametrize the demo-startup compose from scenario + run-id · est 3
+- AC: given a scenario → emits a compose based on the demo-startup base with N nodes, network `flab_<run-id>`, prefixed containers (build on E1-3, don't regenerate from scratch).
 
 **E3-4** · `lib/docker/orchestrator.ts` — `up`/`down` dynamic compose, isolated network · est 3
 - AC: `up` builds the correct number of nodes; `down` removes network/containers cleanly.

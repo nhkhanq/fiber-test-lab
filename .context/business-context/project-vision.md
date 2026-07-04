@@ -33,6 +33,8 @@ Hiện tại, cách DUY NHẤT để "chạm" vào các tình huống này là t
 
 **Tại sao là "infrastructure" đúng nghĩa:** Test Lab không biết và không cần biết app đang test là gì — ví, merchant gateway, game, agent đều dùng được. Trả lời trực tiếp câu hỏi gốc của hackathon: *"Does this help future developers interact with Fiber more easily?"*
 
+**Quan hệ với `fiber-demo-startup` (repo chính thức):** demo-startup đã cung cấp hạ tầng docker (CKB dev chain + nhiều FNN node) nhưng ở dạng **học tương tác** — mở channel/trả tiền thủ công qua UI. Nó tự nêu 4 thứ còn thiếu để thành test harness: *automated channel-opening, scenario definitions, assertion logic, CLI to run named scenarios*. **Test Lab build ON TOP demo-startup, bổ sung đúng 4 thứ đó** — biến "môi trường học" thành "test tự động lặp lại được". Không phát minh lại hạ tầng; chỉ thêm lớp automation còn thiếu. Điều này vừa giảm rủi ro tiến độ (không dựng docker từ đầu), vừa là đóng góp mới rõ ràng.
+
 ## Hackathon Scope
 
 **IN SCOPE — v1 (must-have):**

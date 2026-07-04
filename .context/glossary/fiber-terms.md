@@ -14,7 +14,17 @@ tags: [fiber, ckb, payment-channel, testing]
 Mạng payment channel P2P trên Nervos CKB. Tương tự Bitcoin Lightning nhưng multi-asset (CKB, RUSD, UDT).
 
 ## FNN (Fiber Network Node)
-Reference implementation của Fiber protocol (Rust). Test Lab chạy nhiều FNN binary THẬT trong các container.
+Reference implementation của Fiber protocol (Rust). Test Lab chạy nhiều FNN binary THẬT trong các container. Release gồm 2 binary: `fnn` (HTTP RPC + node maintenance) và `fnn-cli` (CLI quản lý). Source: github.com/nervosnetwork/fiber.
+
+## fnn-cli (cấu trúc subcommand)
+CLI quản lý node, dùng dạng **subcommand** (đã verify từ doc):
+- `fnn-cli info` — thông tin node
+- `fnn-cli peer list_peers` — danh sách peer
+- `fnn-cli channel list_channels` — danh sách channel
+(KHÔNG phải lệnh phẳng kiểu `fnn-cli open_channel`.)
+
+## fiber-demo-startup
+Repo chính thức (github.com/HappySonnyDev/fiber-demo-startup, branch `demo-0.8`) — docker-compose dựng CKB dev chain local + nhiều Fiber node (1 bootnode + 3 node + transfer container cấp tiền) + app Next.js demo. **Test Lab build ON TOP repo này** (fork hạ tầng docker đã chứng minh, thêm lớp scenario/seeder/test-kit/CLI). demo-startup là "interactive learning", Test Lab biến nó thành "automated testing".
 
 ## Payment Channel
 Quan hệ trực tiếp 2 node. Mở = khoá CKB on-chain vào Funding Cell (multisig). Giao dịch off-chain. Đóng = settle on-chain.
@@ -75,7 +85,16 @@ File JSON ghi lại toàn bộ 1 run (steps + mọi RPC call thô). Nguồn sự
 Thư viện assertion (dùng trong Vitest): `expectPaymentSucceeds`, `expectPaymentFails`, `expectChannelState`.
 
 ## offckb
-Công cụ dựng CKB devnet local + faucet. Cấp tiền test cho các node, thay testnet công cộng.
+Công cụ dựng CKB devnet local + faucet. **Lưu ý:** đường đã-chứng-minh là dùng CKB dev chain trong docker-compose của `fiber-demo-startup`, không phải offckb standalone. offckb chỉ là phương án thay thế nếu cần.
+
+## Tài liệu chính thức (nguồn tra cứu)
+- Onboarding hackathon: github.com/RetricSu/fiber-hackathon-docs
+- Docs chính: fiber.world/docs · How it works: /docs/how-it-works
+- RPC reference: fiber.world/docs/api-reference
+- Quick-start: /docs/quick-start/run-a-node · /basic-transfer · /transfer-stablecoin · /multi-hop-transfer (≈ two-hop-route)
+- SDK JS: fiber.world/docs/build/sdk/js (`@ckb-ccc/fiber`)
+- FNN source: github.com/nervosnetwork/fiber · Fiber scripts: github.com/nervosnetwork/fiber-scripts
+- Faucet testnet: faucet.nervos.org
 
 ## Global config (`fiber-lab.config.ts`)
 Tầng 2 settings — hành vi chung cả hệ thống (timeout, poll interval, version image). Dev sửa 1 lần.

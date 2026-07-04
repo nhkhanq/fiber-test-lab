@@ -18,15 +18,34 @@ tags: [typescript, docker-compose, fiber-node, offckb, cli, testing, local]
 | CLI framework | `commander` | Nhẹ, đủ cho ~5 lệnh, không cần framework nặng |
 | Parse kịch bản | `yaml` | Đọc file scenario `.yaml` |
 | Validate schema | `zod` | Validate scenario TRƯỚC khi dựng docker — fail fast, message rõ |
-| Container orchestration | Docker + Docker Compose (v2, `docker compose`) | Dựng N node Fiber + 1 CKB devnet, cô lập mạng nội bộ |
-| Fiber node | FNN binary (chính thức, pinned version) | Node THẬT, không giả lập giao thức — kết quả test phản ánh hành vi thật |
-| CKB devnet | `offckb` | Devnet local + faucet, không phụ thuộc testnet công cộng |
+| Hạ tầng docker nền | **fork `fiber-demo-startup`** (`demo-0.8`) | ĐÃ dockerize sẵn CKB dev chain + nhiều FNN node + transfer container — không dựng lại từ đầu (xem mục 2b) |
+| Container orchestration | Docker + Docker Compose (v2, `docker compose`) | Điều phối N node Fiber + CKB dev chain, cô lập mạng nội bộ |
+| Fiber node | FNN binary (chính thức, pinned version) — image từ demo-startup | Node THẬT, không giả lập giao thức — kết quả test phản ánh hành vi thật |
+| CKB devnet | CKB dev chain (từ compose demo-startup) | Devnet local + transfer container cấp tiền, không phụ thuộc testnet. (offckb = phương án thay thế nếu cần) |
 | Gọi Fiber RPC | `@ckb-ccc/fiber` (SDK chính thức) | SDK hackathon khuyến nghị, tránh tự viết JSON-RPC thô |
 | Test framework | Vitest | Nhẹ, nhanh, dùng cho `test-kit` và test mẫu |
 | Lưu run-log | File JSON (fs) | Vòng đời dữ liệu ngắn — không cần Postgres (xem mục 8) |
 | Package manager | npm | 1 package duy nhất, không cần workspace |
 
-**Pinned versions:** FNN binary version và `@ckb-ccc/fiber` version phải ghim cứng trong `docs/scenario-catalog.md` và `package.json` — vì hành vi RPC có thể đổi giữa các bản, kết quả verify chỉ đúng với version đã test.
+**Pinned versions:** FNN version (theo `fiber-demo-startup demo-0.8`) và `@ckb-ccc/fiber` version phải ghim cứng trong `docs/scenario-catalog.md` và `package.json` — vì hành vi RPC có thể đổi giữa các bản, kết quả verify chỉ đúng với version đã test.
+
+## 2b. Build ON TOP of fiber-demo-startup (không dựng docker từ đầu)
+
+> Xác minh từ doc chính thức (2026-07-04): repo `github.com/HappySonnyDev/fiber-demo-startup` (branch `demo-0.8`) đã cung cấp docker-compose chạy **CKB dev chain local + 1 bootnode + 3 Fiber node + transfer container (cấp tiền) + app demo**. Đây là phần hạ tầng rủi ro/tốn thời gian nhất — ĐÃ có sẵn.
+
+**Phân chia rõ: cái gì tái dùng, cái gì Test Lab tự làm**
+
+| Tầng | Nguồn | Ghi chú |
+|---|---|---|
+| CKB dev chain + FNN node containers + fund distribution | **fiber-demo-startup (tái dùng)** | Fork compose + Dockerfile của nó làm nền |
+| Automated channel-opening (seeder) | **Test Lab (mới)** | demo-startup mở channel thủ công qua UI — Test Lab tự động hoá |
+| Scenario YAML (topology + seed + expect) | **Test Lab (mới)** | demo-startup không có khái niệm scenario |
+| Assertion / validation (test-kit) | **Test Lab (mới)** | demo-startup không có |
+| CLI chạy named scenario + run-id isolation + run-log | **Test Lab (mới)** | demo-startup chỉ có app demo tương tác |
+
+Chính `fiber-demo-startup` tự nêu 4 thứ nó THIẾU để thành test harness — trùng khít phần "mới" ở trên. Đây là ranh giới đóng góp của Test Lab.
+
+**Hệ quả với "compose sinh động" (mục 6):** thay vì sinh compose hoàn toàn từ số 0, Test Lab **tham số hoá compose của demo-startup** (số node, capacity, run-id prefix) — nhẹ hơn, ít rủi ro hơn. Nguyên tắc cô lập run-id vẫn giữ nguyên.
 
 ## 2. Kiến trúc tổng thể
 
