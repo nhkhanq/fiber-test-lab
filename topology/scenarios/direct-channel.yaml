@@ -1,0 +1,14 @@
+name: direct-channel
+description: Alice pays Bob over a single direct channel
+nodes: [alice, bob]
+channels:
+  - from: alice
+    to: bob
+    capacity: 500
+seed:
+  - action: send_payment
+    from: alice
+    to: bob
+    amount: 100
+expect:
+  status: succeeded
