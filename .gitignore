@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Run-logs & runtime state (mỗi run sinh động, không commit)
+.fiber-lab/runs/*.json
+
+# Build / cache
+dist/
+*.tsbuildinfo
+
+# Env / editor
+.env
+.env.local
+.DS_Store
+*.log
