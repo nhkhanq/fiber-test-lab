@@ -19,8 +19,9 @@
 | **E2-2** fiber-lab.config.ts + loader | ✅ DONE | lib/config.ts (zod schema + loadConfig) + fiber-lab.config.ts. typecheck pass, load trả đúng giá trị. |
 | **E2-3** lib/fiber/client.ts | ✅ DONE | FiberClient wrap @ckb-ccc/fiber, gọi RPC theo tên node + logger hook. Verify thật: getNodeInfo/listChannels vào alice(10001) OK, đọc đúng kênh E0. |
 | **E2-4** lib/runlog/store.ts | ✅ DONE | RunLogStore (zod schema, create/recordRpc/recordStep/finish/save/load). Verify: client→store→file→load OK, JSON khớp schema. HẾT EPIC E2. |
-| **E3-1** zod schema scenario | 🟡 đang làm | Channel/SeedStep/Expectation. |
-| E3-2 → E8 | ⬜ chưa | |
+| **E3-1** zod schema scenario | ✅ DONE | lib/scenario/schema.ts — Channel/SeedStep/Expectation + superRefine (node refs, capacity>=100, reason chỉ khi failed). |
+| **E3-2** loader YAML + zod | ✅ DONE | lib/scenario/loader.ts — parse YAML, safeParse, ScenarioValidationError liệt kê field lỗi, check name khớp file. Sample: topology/scenarios/direct-channel.yaml. |
+| E3-3 → E8 | ⬜ chưa | Kế: E3-3 compose.template.ts (tự viết compose, không fork). |
 
 ## Mốc dữ liệu đã chốt (thật, không đoán)
 
