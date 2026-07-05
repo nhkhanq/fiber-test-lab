@@ -36,9 +36,20 @@
 - docker-compose.yml của demo-startup: subnet `172.21.0.0/16` → `172.30.0.0/16`
   (+ IP node 172.30.0.10-13) vì đụng `server_default`.
 
-## Việc tiếp theo
+## ⏸️ ĐIỂM DỪNG — mai làm tiếp đúng ở đây
 
-1. Xong E0-3: poll list_channels → CHANNEL_READY → new_invoice(bob) → send_payment(alice) → shutdown_channel.
-2. E0-5: ép over-capacity, thu raw error.
-3. E1-1: kiểm tra license.
-4. Bắt đầu E2 (skeleton project: package.json, tsconfig, tsx, folders).
+**Đang ở:** E3-3 (`topology/compose.template.ts` + hạ tầng), làm dở.
+- ✅ Đã xong: FNN 0.8.0 Dockerfile (`topology/docker/fnn.Dockerfile`) — build OK, `fnn --version` chạy trong container.
+- ⏳ Mắt xích CHẶN kế tiếp: **nguồn fiber-scripts binaries cho CKB genesis-custom** (repo không có release asset). Xem `docs/hands-on/e3-3-infra-research.md` §"Sub-decision còn mở". 3 cách B1/B2/B3.
+- 👉 **Việc đầu tiên mai:** điều tra **B3 (offckb v0.4.8)** — xem có bundle sẵn FundingLock/CommitmentLock không. Có → genesis nhẹ. Không → rơi về B1 (build fiber-scripts) hoặc B2 (lấy artifact + verify checksums.txt).
+
+**Sau khi có fiber-scripts:** viết CKB devnet (image `nervos/ckb`, dev mode, genesis nhúng scripts + funding) → devnet config cho FNN → compose tối thiểu CKB+1 FNN (network `flab_<run-id>`, không bind host) → rồi mới `compose.template.ts` sinh động N node.
+
+**Lệnh khởi động nhanh mai:** `/dev-harness E3-3` (đã đọc progress + research doc).
+
+**Git:** nhánh `feat/core-scaffold`, PR #43 → `canary` (chờ review/merge). Sau merge: `git checkout canary && git pull`, rồi branch mới off canary cho E3-3 phần còn lại.
+
+## Đã hoàn thành (E0–E3-2 + E3-3 phần Dockerfile)
+
+E0 (hands-on) · E1-1/1-2/1-4/1-5 · E2-1..E2-4 (skeleton) · E3-1 (schema) · E3-2 (loader).
+Issues đóng: #4–17, #41, #42.
