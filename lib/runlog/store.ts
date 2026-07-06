@@ -130,4 +130,13 @@ export class RunLogStore {
     const raw = await readFile(runLogPath(runId), "utf8");
     return RunLogSchema.parse(JSON.parse(raw));
   }
+
+  /** Cập nhật status của 1 run-log đã lưu (VD "reset") mà KHÔNG xoá file — xem BR-CLN-002. */
+  static async setStatus(runId: string, status: RunStatus, error?: string): Promise<void> {
+    const log = await RunLogStore.load(runId);
+    log.status = status;
+    log.finishedAt = new Date().toISOString();
+    if (error !== undefined) log.error = error;
+    await writeFile(runLogPath(runId), JSON.stringify(RunLogSchema.parse(log), null, 2), "utf8");
+  }
 }

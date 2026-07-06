@@ -5,6 +5,7 @@ export const MIN_CHANNEL_CAPACITY_CKB = 100;
 export const MIN_CHANNEL_RESERVE_CKB = 99;
 
 export const RUNS_DIR = ".fiber-lab/runs";
+export const WORK_DIR = ".fiber-lab/work"; // compose file materialize hoá theo run-id
 export const SCENARIOS_DIR = "topology/scenarios";
 
 // --- Hạ tầng ghim cứng (deterministic — xem decisions-log 2026-07-05 + docs/hands-on/e3-3-infra-research.md) ---
