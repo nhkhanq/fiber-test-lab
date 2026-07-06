@@ -13,9 +13,12 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # fiber on-chain scripts (compiled blobs, cùng version FNN đã pin) → nhúng vào genesis lúc entrypoint.
+# curl retry/backoff: raw.githubusercontent hay 429 rate-limit khi tải liên tiếp.
 RUN mkdir -p /fiber-scripts \
     && for c in auth funding-lock commitment-lock simple_udt xudt_rce always_success; do \
-         curl -fsSL -o "/fiber-scripts/$c" "${FIBER_CONTRACTS_URL}/$c"; \
+         curl -fsSL --retry 8 --retry-delay 5 \
+              -o "/fiber-scripts/$c" "${FIBER_CONTRACTS_URL}/$c" \
+         && sleep 3; \
        done
 
 COPY ckb/entrypoint.sh /usr/local/bin/flab-ckb-entrypoint.sh

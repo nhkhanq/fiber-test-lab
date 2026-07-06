@@ -13,6 +13,10 @@ BA_ARG="${CKB_BA_ARG:-0xa1db2eef3f29f3ef6f86c8d2a0772c705c449f4a}"
 if [ ! -f "$DATA_DIR/ckb.toml" ]; then
   ckb init -C "$DATA_DIR" -c dev --ba-arg "$BA_ARG" --force
 
+  # Ghim genesis message (ckb init đặt = timestamp ms → genesis hash + out-point đổi mỗi boot).
+  # Cố định ⇒ out-point cell fiber deterministic giữa các lần `up` (bất biến determinism).
+  sed -i 's|^message = "[0-9]*"|message = "flab-devnet"|' "$DATA_DIR/specs/dev.toml"
+
   # RPC nghe mọi interface trong docker net (mặc định chỉ localhost) — vẫn KHÔNG bind ra host.
   sed -i 's|127.0.0.1:8114|0.0.0.0:8114|g' "$DATA_DIR/ckb.toml"
   # Bật IntegrationTest + Indexer (giữ các module mặc định).
