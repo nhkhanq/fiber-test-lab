@@ -69,5 +69,7 @@ FNN không chạy được trên một CKB devnet trống. Nó cần:
 - `topology/docker/ckb/entrypoint.sh`: `ckb init -c dev` (sinh genesis chuẩn) → **append** `[[genesis.system_cells]]`
   trỏ `/fiber-scripts/*` (mô hình hoá theo fiber `tests/deploy/init-dev-chain.sh`, tự viết) → `ckb run` + dummy miner.
   Miner mint về key faucet (offckb ckb-miner key), cellbase_maturity=0 → orchestrator faucet phân phối (E3-4).
-- ⚠️ **PENDING E3-4 live-boot:** xác nhận `create_type_id` + thứ tự cell fiber khớp FNN devnet config
-  (đối chiếu `node_info.default_funding_lock_script`), và bước faucet cấp tiền từng node.
+- ✅ **LIVE-BOOT OK (2026-07-06):** build + `ckb run` chạy, RPC trả tip, miner tiến block 0→4,
+  genesis nhúng 5 fiber cell thành công (14 output system-cell ở genesis tx). Chi tiết: `progress.md`.
+- ⚠️ **Còn PENDING (→E3-5):** đối chiếu `create_type_id`/thứ tự cell với FNN `node_info.default_funding_lock_script`
+  (chỉ chốt khi FNN kết nối), và bước faucet cấp tiền từng node.
