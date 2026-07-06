@@ -21,7 +21,8 @@
 | **E2-4** lib/runlog/store.ts | ✅ DONE | RunLogStore (zod schema, create/recordRpc/recordStep/finish/save/load). Verify: client→store→file→load OK, JSON khớp schema. HẾT EPIC E2. |
 | **E3-1** zod schema scenario | ✅ DONE | lib/scenario/schema.ts — Channel/SeedStep/Expectation + superRefine (node refs, capacity>=100, reason chỉ khi failed). |
 | **E3-2** loader YAML + zod | ✅ DONE | lib/scenario/loader.ts — parse YAML, safeParse, ScenarioValidationError liệt kê field lỗi, check name khớp file. Sample: topology/scenarios/direct-channel.yaml. |
-| E3-3 → E8 | ⬜ chưa | Kế: E3-3 compose.template.ts (tự viết compose, không fork). |
+| **E3-3** compose động | 🔨 CODE XONG (chờ live-boot) | `topology/compose.template.ts` sinh compose từ scenario+run-id (1 CKB + N FNN, network `flab_<run-id>`, container prefix, không bind host, healthcheck/depends_on). Verify: typecheck + smoke render + `docker compose config` VALID. CKB genesis-custom (`ckb.Dockerfile`+`entrypoint.sh`, fiber-scripts từ FNN v0.8.0) đã viết, PENDING live-boot ở E3-4. |
+| E3-4 → E8 | ⬜ chưa | Kế: E3-4 orchestrator up/down + live-boot CKB genesis. |
 
 ## Mốc dữ liệu đã chốt (thật, không đoán)
 
@@ -36,20 +37,28 @@
 - docker-compose.yml của demo-startup: subnet `172.21.0.0/16` → `172.30.0.0/16`
   (+ IP node 172.30.0.10-13) vì đụng `server_default`.
 
-## ⏸️ ĐIỂM DỪNG — mai làm tiếp đúng ở đây
+## Sub-decision fiber-scripts — ĐÃ GIẢI (2026-07-06, ⏳ chờ human confirm để ghi decisions-log)
 
-**Đang ở:** E3-3 (`topology/compose.template.ts` + hạ tầng), làm dở.
-- ✅ Đã xong: FNN 0.8.0 Dockerfile (`topology/docker/fnn.Dockerfile`) — build OK, `fnn --version` chạy trong container.
-- ⏳ Mắt xích CHẶN kế tiếp: **nguồn fiber-scripts binaries cho CKB genesis-custom** (repo không có release asset). Xem `docs/hands-on/e3-3-infra-research.md` §"Sub-decision còn mở". 3 cách B1/B2/B3.
-- 👉 **Việc đầu tiên mai:** điều tra **B3 (offckb v0.4.8)** — xem có bundle sẵn FundingLock/CommitmentLock không. Có → genesis nhẹ. Không → rơi về B1 (build fiber-scripts) hoặc B2 (lấy artifact + verify checksums.txt).
+- **B3 (offckb) loại:** offckb 0.4.7 genesis KHÔNG có FundingLock/CommitmentLock (verify tay bundled dev.toml).
+- **CHỌN B2:** tải fiber-scripts compiled từ **repo FNN tag v0.8.0** (`tests/deploy/contracts/`) — cùng version FNN đã pin, deterministic. Chi tiết: `e3-3-infra-research.md` §"Sub-decision ĐÃ GIẢI".
+- **CKB pin:** `nervos/ckb:v0.207.0` (bản pair với offckb 0.4.7). → Cần human confirm 3 mục này trước khi append decisions-log.
 
-**Sau khi có fiber-scripts:** viết CKB devnet (image `nervos/ckb`, dev mode, genesis nhúng scripts + funding) → devnet config cho FNN → compose tối thiểu CKB+1 FNN (network `flab_<run-id>`, không bind host) → rồi mới `compose.template.ts` sinh động N node.
+## ⏸️ ĐIỂM DỪNG — làm tiếp ở E3-4
 
-**Lệnh khởi động nhanh mai:** `/dev-harness E3-3` (đã đọc progress + research doc).
+**E3-3 code đã xong + verify** (typecheck, smoke render, `docker compose config` VALID):
+- `topology/compose.template.ts` — `buildComposeProject(scenario, runId, config)` + `renderComposeYaml`.
+- `lib/constants.ts` — thêm pin hạ tầng (CKB image/version, cổng FNN/CKB, build context).
+- `topology/docker/ckb.Dockerfile` + `topology/docker/ckb/entrypoint.sh` — CKB genesis-custom (fiber-scripts từ FNN v0.8.0).
 
-**Git:** nhánh `feat/core-scaffold`, PR #43 → `canary` (chờ review/merge). Sau merge: `git checkout canary && git pull`, rồi branch mới off canary cho E3-3 phần còn lại.
+**👉 Việc kế (E3-4 — orchestrator up/down):**
+1. **Live-boot CKB genesis** — `docker compose build` + `up` CKB service, xác nhận genesis khởi động, kiểm `node_info.default_funding_lock_script` để chốt `create_type_id`/thứ tự cell fiber trong `entrypoint.sh`.
+2. Sinh FNN per-node config (key, cell_deps từ genesis out-point, peers) — mắt xích để FNN boot & discover.
+3. Faucet: phân phối CKB từ miner key → từng node (đủ mở channel).
+4. `lib/docker/orchestrator.ts` — `up`/`down` compose động, teardown sạch theo run-id.
 
-## Đã hoàn thành (E0–E3-2 + E3-3 phần Dockerfile)
+**Git:** đã merge PR #43 vào `main`. Branch mới off `canary` cho E3-3.
 
-E0 (hands-on) · E1-1/1-2/1-4/1-5 · E2-1..E2-4 (skeleton) · E3-1 (schema) · E3-2 (loader).
+## Đã hoàn thành (E0–E3-2 + E3-3 code)
+
+E0 (hands-on) · E1-1/1-2/1-4/1-5 · E2-1..E2-4 (skeleton) · E3-1 (schema) · E3-2 (loader) · **E3-3 (compose.template.ts + CKB genesis infra, chờ live-boot)**.
 Issues đóng: #4–17, #41, #42.
