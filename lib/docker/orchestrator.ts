@@ -4,6 +4,7 @@ import { access, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { GlobalConfig } from "../config";
 import { CKB_SERVICE, WORK_DIR } from "../constants";
+import { generateNodeConfigs } from "../fiber/nodeConfig";
 import { RunLogStore, type NodeRecord } from "../runlog/store";
 import type { Scenario } from "../scenario/schema";
 import {
@@ -13,6 +14,8 @@ import {
   renderComposeYaml,
   type ComposeProject,
 } from "../../topology/compose.template";
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export class DockerError extends Error {
   constructor(message: string, readonly stderr = "") {
@@ -112,6 +115,37 @@ export async function composeUp(params: {
   return docker(args);
 }
 
+/** Trạng thái healthcheck của 1 container ("healthy"/"unhealthy"/"starting"/"none"). */
+async function containerHealth(container: string): Promise<string> {
+  const r = await docker([
+    "inspect",
+    "--format",
+    "{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}",
+    container,
+  ]);
+  return r.stdout.trim();
+}
+
+/**
+ * Chờ mọi container READY qua healthcheck (BR-POL-001: poll node_info tới READY).
+ * healthcheck FNN = curl node_info; CKB = get_tip_block_number. Timeout theo config.
+ */
+export async function waitForReady(containers: string[], config: GlobalConfig): Promise<void> {
+  const deadline = Date.now() + config.pollTimeoutMs;
+  const pending = new Set(containers);
+
+  while (pending.size > 0) {
+    for (const c of [...pending]) {
+      if ((await containerHealth(c)) === "healthy") pending.delete(c);
+    }
+    if (pending.size === 0) return;
+    if (Date.now() > deadline) {
+      throw new DockerError(`Timeout ${config.pollTimeoutMs}ms chờ READY: ${[...pending].join(", ")}`);
+    }
+    await sleep(config.pollIntervalMs);
+  }
+}
+
 export interface UpResult {
   runId: string;
   project: string;
@@ -142,6 +176,9 @@ export async function up(
   const store = RunLogStore.create({ runId, scenario: scenario.name, network, nodes });
   await store.save();
 
+  // Sinh base dir per-node (config.yml + keys) TRƯỚC khi up — volume mount cần file sẵn.
+  await generateNodeConfigs(scenario, runId);
+
   const result = await composeUp({
     project: project.name,
     composeFile,
@@ -155,6 +192,23 @@ export async function up(
     if (!opts.keep) await teardown(project.name, network, composeFile);
     throw new DockerError(`docker compose up thất bại (run ${runId})`, result.stderr);
   }
+
+  // Chờ CKB + mọi node FNN READY (BR-POL-001) — không seed trước khi READY.
+  try {
+    await waitForReady(
+      Object.keys(project.services).map((n) => containerName(config, runId, n)),
+      config,
+    );
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    store.finish("failed", msg);
+    await store.save();
+    if (!opts.keep) await teardown(project.name, network, composeFile);
+    throw e;
+  }
+
+  store.finish("completed");
+  await store.save();
 
   return {
     runId,

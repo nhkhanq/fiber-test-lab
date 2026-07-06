@@ -26,3 +26,8 @@ export const CKB_SERVICE = "ckb";
 export const DOCKER_BUILD_CONTEXT = "topology/docker";
 export const FNN_DOCKERFILE = "fnn.Dockerfile";
 export const CKB_DOCKERFILE = "ckb.Dockerfile";
+
+// FNN per-node: base dir mount trong container, chain spec baked sẵn, password mã hoá key (devnet).
+export const FNN_BASE_DIR = "/fiber-node";
+export const DEV_CHAIN_SPEC = "/flab/dev.toml";
+export const FNN_SECRET_KEY_PASSWORD = "flab-dev";
