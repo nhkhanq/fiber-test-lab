@@ -23,7 +23,8 @@
 | **E3-2** loader YAML + zod | ✅ DONE | lib/scenario/loader.ts — parse YAML, safeParse, ScenarioValidationError liệt kê field lỗi, check name khớp file. Sample: topology/scenarios/direct-channel.yaml. |
 | **E3-3** compose động | ✅ DONE | `topology/compose.template.ts` sinh compose từ scenario+run-id (1 CKB + N FNN, network `flab_<run-id>`, container prefix, không bind host, healthcheck/depends_on). Verify: typecheck + smoke render + `docker compose config` VALID. **CKB genesis-custom LIVE-BOOT OK** (xem dưới). |
 | **E3-4** orchestrator up/down | ✅ DONE | `lib/docker/orchestrator.ts` — `up` (sinh run-id + compose + `docker compose up -d --build`, fail giữa chừng → tự teardown), `teardown`/`reset`/`resetAll` (down -v + fallback xoá theo label + rm network), `reset` đánh dấu run-log `status:reset` (giữ file, BR-CLN-002). Verify LIVE trên Docker: composeUp→network+container tồn tại→teardown→sạch; teardown idempotent; reset marks status. |
-| E3-5 → E8 | ⬜ chưa | Kế: E3-5 wait-for-READY (poll node_info + list_channels) + sinh FNN per-node config. |
+| **E3-5** wait-for-READY + FNN config | ✅ DONE | FNN boot THẬT trên devnet reimplement. `lib/fiber/nodeConfig.ts` sinh config.yml+sk+ckb/key per-node; FNN Dockerfile+entrypoint (bind RPC vào IP private → né biscuit, dev.toml+fiber-scripts baked); compose FNN volume/command/env + healthcheck qua `hostname -i`; orchestrator `waitForReady` poll docker health. Verify LIVE: `up direct-channel` → alice+bob READY 14s, node_info.chain_hash=devnet mình → reset sạch. |
+| E3-6 → E8 | ⬜ chưa | Kế: E3-6 seeder (open_channel/send_payment/new_invoice) + faucet cấp tiền node. |
 
 ## Mốc dữ liệu đã chốt (thật, không đoán)
 
@@ -55,7 +56,21 @@ Build + boot `topology/docker/ckb.Dockerfile` standalone:
 - ⚠️ Còn PENDING: đối chiếu `create_type_id`/thứ tự cell với FNN `node_info.default_funding_lock_script`
   (chỉ chốt được khi FNN kết nối vào — thuộc E3-5).
 
-## ⏸️ ĐIỂM DỪNG — làm tiếp ở E3-5
+## ⏸️ ĐIỂM DỪNG — E3-5 XONG, làm tiếp ở E3-6 (seeder + faucet)
+
+**E3-5 DONE (2026-07-07):** FNN boot thật trên CKB devnet reimplement. Recipe FNN devnet đã chốt:
+- Config FNN devnet KHÔNG cần scripts section (đọc từ chain spec). `fiber.chain: /flab/dev.toml` (baked).
+- FNN RPC phải bind IP private container (không 0.0.0.0) để né biscuit auth → entrypoint `hostname -i`.
+- Mỗi node: base dir mount (`config.yml` + `fiber/sk` 32B + `ckb/key` hex), env `FIBER_SECRET_KEY_PASSWORD`.
+- `up direct-channel` → alice+bob READY 14s (verify node_info), reset sạch.
+
+**👉 Việc kế (E3-6 — seeder):** faucet cấp CKB từ account `0xc8328aab…` (20 tỷ, privkey `d00c06bf…`) →
+mỗi node (dùng ckb/key đã sinh); connect_peer; open_channel + poll ChannelReady (BR-POL-002);
+send_payment/new_invoice; ghi mọi RPC vào run-log qua FiberClient logger. Cần port-map RPC ra host cho
+FiberClient (ngoài docker) — hoặc gọi qua `docker exec`. Xem `.context/business-rules` BR-SEED-*.
+
+---
+### (cũ) ⏸️ ĐIỂM DỪNG — làm tiếp ở E3-5
 
 **E3-3 + E3-4 xong + verify** (typecheck + smoke + live Docker). Files:
 - `topology/compose.template.ts`, `lib/constants.ts` (pin hạ tầng + WORK_DIR).
