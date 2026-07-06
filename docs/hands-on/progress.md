@@ -68,10 +68,14 @@ deterministic giữa các boot. Đã trích **code_hash + index** 5 cell fiber (
 `e3-3-infra-research.md` §Live-boot. ⇒ E3-5 step 1 "chốt create_type_id" coi như đã có dữ liệu.
 
 **👉 Việc kế (E3-5 — wait-for-READY + FNN config):**
-1. **Sinh FNN per-node config.yml** trỏ code_hash + cell_dep out-point đã trích → boot FNN thật, đối chiếu
-   `node_info.default_funding_lock_script` == funding-lock `0x1a1e4fef…`. Kèm key + `ckb_rpc_url` + peers/bootnode.
-2. Poll `node_info` tới READY sau `up` (BR-POL-001) + poll `list_channels` tới `ChannelReady` (BR-POL-002).
-3. Faucet: phân phối CKB từ miner key → từng node (đủ mở channel).
+- ✅ **Genesis align fiber devnet DONE (2026-07-06):** rewrite `ckb/entrypoint.sh` → dev.toml khớp
+  `tests/nodes/deployer/dev.toml` (create_type_id=false, message ckb_dev, faucet 20 tỷ CKB tới
+  `0xc8328aab…` privkey `d00c06bf…`). Verify live: boot OK, cells index auth=5/funding=6/commitment=7/
+  sudt=8/xudt=9, faucet balance = 20 tỷ. Config FNN devnet KHÔNG cần scripts section (đọc từ chain spec).
+1. **Share dev.toml + /fiber-scripts sang FNN container** (volume) → FNN config.yml (`fiber.chain: dev.toml`,
+   `ckb.rpc_url: http://ckb:8114`, rpc `0.0.0.0:8227`) + sinh secret key → boot FNN thật.
+2. Đối chiếu `node_info.default_funding_lock_script` == data-hash funding-lock; poll node_info READY (BR-POL-001).
+3. Faucet: phân phối CKB từ account faucet (đã nạp 20 tỷ trong genesis) → từng node.
 
 **Git:** E3-3 = PR #44 (→ canary). E3-4 + genesis-determinism-fix trên branch `feat/e3-4-orchestrator`.
 

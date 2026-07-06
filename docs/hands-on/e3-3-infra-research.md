@@ -93,6 +93,24 @@ CKB genesis-custom **boot OK**, 5 cell fiber nhúng đúng genesis (cellbase tx[
 | simple_udt | 8 | `0xe09352af0066f3162287763ce4ddba9af6bfaeab198dc7ab37f8c71c9e68bb5b` |
 | xudt_rce | 9 | `0xbb4469004225b39e983929db71fe2253cba1d49a76223e9e1d212cdca1f79f28` |
 
-⚠️ Các code_hash trên phụ thuộc genesis spec hiện tại; nếu đổi thứ tự/nội dung cell → tính lại.
-**Còn lại (E3-5):** FNN devnet config.yml trỏ các code_hash + cell_dep out-point trên → boot FNN, đối chiếu
-`node_info.default_funding_lock_script` phải khớp `funding-lock` code_hash; rồi faucet.
+## E3-5 correction (2026-07-06) — ALIGN genesis theo fiber devnet chuẩn
+
+Đọc `nervosnetwork/fiber` v0.8.0 `tests/nodes/deployer/{dev.toml,config.yml}` + `tests/deploy/init-dev-chain.sh`:
+- **Config FNN devnet KHÔNG có `scripts:` section** — chỉ `fiber.chain: dev.toml`. FNN **đọc fiber scripts trực
+  tiếp từ chain spec (dev.toml) theo convention thứ tự cell genesis**. ⇒ genesis phải khớp cấu trúc fiber devnet.
+- Fiber dùng `create_type_id = false` (data-hash), `message = "ckb_dev"`, account faucet nạp sẵn trong genesis.
+
+→ **Rewrite `entrypoint.sh`**: sinh dev.toml khớp fiber devnet (thay bản ad-hoc create_type_id=true trước đó):
+  4 system cell chuẩn + 5 fiber cell (`create_type_id=false`, order auth/funding-lock/commitment-lock/simple_udt/xudt_rce)
+  + issued_cell faucet **20 tỷ CKB** tới `0xc8328aab…` (secp256k1 sighash `0x9bd7e06f…`, privkey
+  `d00c06bfd800d27397002dca6fb0993d5ba6399b4238b2f29ee9deb97593d2bc`), `cellbase_maturity=0`, dummy pow.
+
+**Verified live (2026-07-06):** genesis boot OK, miner chạy; fiber cells ở genesis cellbase index
+**auth=5, funding-lock=6, commitment-lock=7, simple_udt=8, xudt_rce=9** (index 0 = genesis message cell);
+faucet account có `0x1bc16d674ec80000` = **20 tỷ CKB**. dev.toml tĩnh hoàn toàn ⇒ deterministic.
+data-hash funding/commitment-lock: verify qua `node_info.default_funding_lock_script` khi FNN boot.
+
+⚠️ Bảng type-id code_hash ở section trên (create_type_id=true) **ĐÃ BỎ** — cells giờ data-hash based.
+
+**Còn lại (E3-5):** share dev.toml + /fiber-scripts sang FNN container → FNN config.yml (`fiber.chain: dev.toml`,
+`ckb.rpc_url: http://ckb:8114`, rpc `0.0.0.0:8227`) + secret key → boot FNN → poll node_info READY + faucet.
