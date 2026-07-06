@@ -59,17 +59,21 @@ Build + boot `topology/docker/ckb.Dockerfile` standalone:
 
 **E3-3 + E3-4 xong + verify** (typecheck + smoke + live Docker). Files:
 - `topology/compose.template.ts`, `lib/constants.ts` (pin hạ tầng + WORK_DIR).
-- `topology/docker/ckb.Dockerfile` + `ckb/entrypoint.sh` (genesis-custom, đã live-boot).
+- `topology/docker/ckb.Dockerfile` + `ckb/entrypoint.sh` (genesis-custom, đã live-boot + fix determinism).
 - `lib/docker/orchestrator.ts` (`up`/`teardown`/`reset`/`resetAll` + `composeUp` seam).
 - `lib/runlog/store.ts` — thêm `setStatus` (đánh dấu reset không xoá file).
 
+**Genesis determinism DONE (2026-07-06):** fix `genesis_cell.message` (ghim `flab-devnet`) → genesis/out-point
+deterministic giữa các boot. Đã trích **code_hash + index** 5 cell fiber (cellbase `0x7dcd6cec…`) — xem
+`e3-3-infra-research.md` §Live-boot. ⇒ E3-5 step 1 "chốt create_type_id" coi như đã có dữ liệu.
+
 **👉 Việc kế (E3-5 — wait-for-READY + FNN config):**
-1. **Sinh FNN per-node config** (key, `ckb_rpc_url`, cell_deps từ genesis out-point, peers/bootnode) —
-   mắt xích để FNN thật boot & discover. Đối chiếu genesis out-point để chốt `create_type_id` (mục PENDING trên).
+1. **Sinh FNN per-node config.yml** trỏ code_hash + cell_dep out-point đã trích → boot FNN thật, đối chiếu
+   `node_info.default_funding_lock_script` == funding-lock `0x1a1e4fef…`. Kèm key + `ckb_rpc_url` + peers/bootnode.
 2. Poll `node_info` tới READY sau `up` (BR-POL-001) + poll `list_channels` tới `ChannelReady` (BR-POL-002).
 3. Faucet: phân phối CKB từ miner key → từng node (đủ mở channel).
 
-**Git:** E3-3 = PR #44 (→ canary). E3-4 stack lên E3-3 (branch `feat/e3-4-orchestrator`).
+**Git:** E3-3 = PR #44 (→ canary). E3-4 + genesis-determinism-fix trên branch `feat/e3-4-orchestrator`.
 
 ## Đã hoàn thành (E0–E3-2 + E3-3 code)
 
