@@ -1,7 +1,6 @@
 # CKB devnet (genesis-custom) cho Fiber Test Lab.
 # Nguồn ghim cứng (deterministic): image CKB official + fiber-scripts lấy từ chính repo FNN tag v0.8.0.
-# LƯU Ý: chi tiết genesis (create_type_id / thứ tự cell) cần đối chiếu với FNN devnet config lúc
-# `up` thật (E3-4) — kiểm chứng qua node_info.default_funding_lock_script. Chưa live-boot ở E3-3.
+# Genesis khớp fiber devnet chuẩn (dev.toml), FNN boot verified (node_info.chain_hash = genesis mình).
 FROM nervos/ckb:v0.207.0
 
 ARG FIBER_TAG=v0.8.0
@@ -21,6 +20,8 @@ RUN mkdir -p /fiber-scripts \
          && sleep 3; \
        done
 
+# Chain spec tĩnh (dùng chung CKB + FNN) — deterministic genesis.
+COPY ckb/dev.toml /flab/dev.toml
 COPY ckb/entrypoint.sh /usr/local/bin/flab-ckb-entrypoint.sh
 RUN chmod +x /usr/local/bin/flab-ckb-entrypoint.sh
 
