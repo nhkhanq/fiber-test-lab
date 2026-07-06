@@ -52,9 +52,22 @@ FNN không chạy được trên một CKB devnet trống. Nó cần:
 - **FNN 0.8.0** (binary official + Dockerfile tự viết). ✅ `topology/docker/fnn.Dockerfile` build OK, `fnn --version` = `Fiber v0.8.0 (335a74a)` trong container.
 - **CKB genesis custom** nhúng sẵn fiber-scripts.
 
-## Sub-decision còn mở: nguồn fiber-scripts binaries cho genesis
-`nervosnetwork/fiber-scripts` **KHÔNG có release asset compiled** — chỉ source + `deployment/` + `checksums.txt`. Lấy binary compiled bằng cách nào:
-- **B1:** build fiber-scripts từ source (cần ckb-script/capsule toolchain — nặng, chậm).
-- **B2:** dùng binary official đã compile lấy từ nguồn tin cậy khác (vd artifact CI của fiber-scripts, hoặc script system của offckb) — cần verify checksum khớp `checksums.txt`.
-- **B3:** offckb v0.4.8 — verify xem có bundle sẵn fiber-scripts (FundingLock/CommitmentLock) không.
-→ Cần quyết trước khi làm genesis. FNN binary đã lo xong; đây là mắt xích còn lại của CKB devnet.
+## Sub-decision ĐÃ GIẢI (2026-07-06) — nguồn fiber-scripts binaries cho genesis
+`nervosnetwork/fiber-scripts` KHÔNG có release asset compiled. Đã điều tra 3 hướng:
+- **B1** (build từ source): loại — nặng/chậm (cần capsule toolchain).
+- **B3** (offckb bundle): **loại** — verify tay `@offckb/cli 0.4.7`: genesis dev.toml của nó
+  (`ckb/devnet/specs/dev.toml`) chỉ nhúng secp256k1/dao/sudt/xudt/omnilock/spore/... —
+  **KHÔNG có FundingLock/CommitmentLock**. offckb thiên về script chuẩn CKB, không có fiber scripts.
+- **B2 (CHỌN):** lấy binary compiled từ **chính repo FNN tag `v0.8.0`**: `tests/deploy/contracts/`
+  chứa blob compiled thật — `funding-lock` (74.8KB), `commitment-lock` (111.9KB), `auth` (150.9KB),
+  `simple_udt`, `xudt_rce`, `always_success`. **Cùng version FNN đã pin → deterministic tuyệt đối**,
+  không cần verify checksum chéo (cùng nguồn cùng tag). Tải trong `ckb.Dockerfile` lúc build.
+
+### Mô hình genesis-custom (đã impl E3-3, PENDING live-boot ở E3-4)
+- CKB image: `nervos/ckb:v0.207.0` (bản offckb 0.4.7 pair — genesis dev.toml khớp).
+- `topology/docker/ckb.Dockerfile`: FROM nervos/ckb → tải 6 fiber-scripts từ FNN v0.8.0 → `/fiber-scripts/`.
+- `topology/docker/ckb/entrypoint.sh`: `ckb init -c dev` (sinh genesis chuẩn) → **append** `[[genesis.system_cells]]`
+  trỏ `/fiber-scripts/*` (mô hình hoá theo fiber `tests/deploy/init-dev-chain.sh`, tự viết) → `ckb run` + dummy miner.
+  Miner mint về key faucet (offckb ckb-miner key), cellbase_maturity=0 → orchestrator faucet phân phối (E3-4).
+- ⚠️ **PENDING E3-4 live-boot:** xác nhận `create_type_id` + thứ tự cell fiber khớp FNN devnet config
+  (đối chiếu `node_info.default_funding_lock_script`), và bước faucet cấp tiền từng node.
