@@ -2,6 +2,7 @@
 import { Command } from "commander";
 import pkg from "../package.json" with { type: "json" };
 import { registerListCommand } from "./commands/list";
+import { registerResetCommand } from "./commands/reset";
 import { registerUpCommand } from "./commands/up";
 
 const program = new Command();
@@ -12,6 +13,7 @@ program
 
 registerListCommand(program);
 registerUpCommand(program);
+registerResetCommand(program);
 
 program.parseAsync(process.argv).catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));
