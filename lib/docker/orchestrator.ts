@@ -146,6 +146,19 @@ export async function waitForReady(containers: string[], config: GlobalConfig): 
   }
 }
 
+/** `docker kill` — mô phỏng peer offline đột ngột (khác `stop`: không graceful shutdown). */
+export async function killNode(container: string): Promise<void> {
+  const r = await docker(["kill", container]);
+  if (r.code !== 0) throw new DockerError(`docker kill thất bại (${container})`, r.stderr);
+}
+
+/** `docker start` container đã kill, rồi chờ healthy lại (BR-POL-001) trước khi seed tiếp tục dùng node. */
+export async function startNode(container: string, config: GlobalConfig): Promise<void> {
+  const r = await docker(["start", container]);
+  if (r.code !== 0) throw new DockerError(`docker start thất bại (${container})`, r.stderr);
+  await waitForReady([container], config);
+}
+
 /** Host endpoint (port map tạm) của FNN RPC 1 node, hoặc null nếu chưa map. */
 async function nodeEndpoint(container: string): Promise<string | null> {
   const r = await docker(["port", container, String(FNN_RPC_PORT)]);

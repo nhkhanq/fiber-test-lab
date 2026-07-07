@@ -2,7 +2,9 @@ import { randomBytes } from "node:crypto";
 import type { GlobalConfig } from "../config";
 import type { FiberClient } from "../fiber/client";
 import { SHANNON_PER_CKB } from "../constants";
+import { killNode, startNode } from "../docker/orchestrator";
 import type { RunLogStore } from "../runlog/store";
+import { containerName } from "../../topology/compose.template";
 import type { Scenario } from "./schema";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -99,13 +101,14 @@ async function waitChannelReady(
 
 /**
  * Thực thi phần `channels` + `seed` của scenario qua FiberClient (mọi RPC đã log vào run-log).
- * Node đã READY (orchestrator chờ trước). kill_node/start_node để E3-7.
+ * Node đã READY (orchestrator chờ trước). runId cần để derive tên container cho kill_node/start_node.
  */
 export async function runSeed(
   scenario: Scenario,
   client: FiberClient,
   store: RunLogStore,
   config: GlobalConfig,
+  runId: string,
 ): Promise<void> {
   const pubkey: Record<string, string> = {};
   const address: Record<string, string> = {};
@@ -157,10 +160,18 @@ export async function runSeed(
         store.recordStep("wait", { durationSec: step.durationSec });
         break;
       }
-      case "kill_node":
-      case "start_node":
-        // E3-7
+      case "kill_node": {
+        const container = containerName(config, runId, step.node!);
+        await killNode(container);
+        store.recordStep("kill_node", { node: step.node }, { container });
         break;
+      }
+      case "start_node": {
+        const container = containerName(config, runId, step.node!);
+        await startNode(container, config);
+        store.recordStep("start_node", { node: step.node }, { container, ready: true });
+        break;
+      }
     }
   }
 }
