@@ -131,6 +131,11 @@ export class RunLogStore {
     return RunLogSchema.parse(JSON.parse(raw));
   }
 
+  /** Nạp lại run-log đã lưu (VD sau `orchestrator.up`) thành store còn ghi tiếp được — dùng cho seed nối tiếp up. */
+  static async resume(runId: string): Promise<RunLogStore> {
+    return new RunLogStore(await RunLogStore.load(runId));
+  }
+
   /** Cập nhật status của 1 run-log đã lưu (VD "reset") mà KHÔNG xoá file — xem BR-CLN-002. */
   static async setStatus(runId: string, status: RunStatus, error?: string): Promise<void> {
     const log = await RunLogStore.load(runId);

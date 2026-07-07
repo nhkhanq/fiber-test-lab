@@ -2,6 +2,7 @@
 import { Command } from "commander";
 import pkg from "../package.json" with { type: "json" };
 import { registerListCommand } from "./commands/list";
+import { registerUpCommand } from "./commands/up";
 
 const program = new Command();
 program
@@ -10,6 +11,7 @@ program
   .version(pkg.version);
 
 registerListCommand(program);
+registerUpCommand(program);
 
 program.parseAsync(process.argv).catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));

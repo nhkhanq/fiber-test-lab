@@ -27,7 +27,17 @@ export function scenarioPath(name: string): string {
 }
 
 export async function loadScenarioFile(filePath: string): Promise<Scenario> {
-  const raw = await readFile(filePath, "utf8");
+  let raw: string;
+  try {
+    raw = await readFile(filePath, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new ScenarioValidationError(filePath, [
+        { path: "(file)", message: `Không tìm thấy file scenario "${filePath}"` },
+      ]);
+    }
+    throw error;
+  }
 
   let parsed: unknown;
   try {
