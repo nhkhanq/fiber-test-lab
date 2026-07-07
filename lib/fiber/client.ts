@@ -62,6 +62,33 @@ export class FiberClient {
     }
   }
 
+  /**
+   * JSON-RPC thô tới 1 node (bỏ qua SDK), có log. Dùng cho method mà SDK canary lệch field
+   * so với FNN 0.8 (vd open_channel: SDK gửi `peer_id`, FNN 0.8 đòi `pubkey`).
+   */
+  async rawCall(node: string, method: string, params: unknown[] = []): Promise<unknown> {
+    const at = new Date().toISOString();
+    const endpoint = this.#endpoints[node];
+    if (!endpoint) throw new Error(`Unknown node "${node}" — chưa cấu hình endpoint`);
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", method, params, id: Date.now() }),
+      });
+      const json = (await res.json()) as { result?: unknown; error?: { message?: string } };
+      if (json.error) {
+        this.#logger?.({ node, method, params, error: json.error, at });
+        throw new Error(`RPC ${method} lỗi: ${json.error.message ?? JSON.stringify(json.error)}`);
+      }
+      this.#logger?.({ node, method, params, response: json.result, at });
+      return json.result;
+    } catch (error) {
+      this.#logger?.({ node, method, params, error, at });
+      throw error;
+    }
+  }
+
 
   getNodeInfo(node: string): Promise<fiber.NodeInfo> {
     return this.#call(node, "node_info", {}, (sdk) => sdk.getNodeInfo());
