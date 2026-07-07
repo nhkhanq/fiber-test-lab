@@ -7,6 +7,7 @@ import {
   CKB_RPC_PORT,
   CKB_SERVICE,
   DEV_CHAIN_SPEC,
+  DEV_FUNDED_KEYS,
   FNN_P2P_PORT,
   FNN_RPC_PORT,
 } from "../constants";
@@ -23,6 +24,9 @@ function nodeConfigYaml(node: string): string {
     fiber: {
       listening_addr: `/ip4/0.0.0.0/tcp/${FNN_P2P_PORT}`,
       announced_node_name: node,
+      // announce địa chỉ dns4 theo tên node (resolve qua docker DNS trong network) → peer connect được.
+      announce_listening_addr: true,
+      announced_addrs: [`/dns4/${node}/tcp/${FNN_P2P_PORT}`],
       chain: DEV_CHAIN_SPEC,
       auto_announce_node: true,
       announce_private_addr: true,
@@ -45,9 +49,15 @@ export async function generateNodeConfigs(
   scenario: Scenario,
   runId: string,
 ): Promise<GeneratedNode[]> {
+  if (scenario.nodes.length > DEV_FUNDED_KEYS.length) {
+    throw new Error(
+      `Scenario "${scenario.name}" có ${scenario.nodes.length} node, chỉ có ${DEV_FUNDED_KEYS.length} account pre-fund trong genesis.`,
+    );
+  }
+
   const generated: GeneratedNode[] = [];
 
-  for (const node of scenario.nodes) {
+  for (const [i, node] of scenario.nodes.entries()) {
     const dir = fnnNodeDir(runId, node);
     await mkdir(join(dir, "fiber"), { recursive: true });
     await mkdir(join(dir, "ckb"), { recursive: true });
@@ -55,7 +65,8 @@ export async function generateNodeConfigs(
     await writeFile(join(dir, "fiber", "sk"), randomBytes(32));
     await chmod(join(dir, "fiber", "sk"), 0o600);
 
-    const ckbPrivKey = randomBytes(32).toString("hex");
+    // Key pre-fund theo index (10 tỷ CKB từ genesis) — mở channel không cần faucet.
+    const ckbPrivKey = DEV_FUNDED_KEYS[i]!;
     await writeFile(join(dir, "ckb", "key"), ckbPrivKey);
 
     await writeFile(join(dir, "config.yml"), nodeConfigYaml(node));

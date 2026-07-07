@@ -31,3 +31,11 @@ export const CKB_DOCKERFILE = "ckb.Dockerfile";
 export const FNN_BASE_DIR = "/fiber-node";
 export const DEV_CHAIN_SPEC = "/flab/dev.toml";
 export const FNN_SECRET_KEY_PASSWORD = "flab-dev";
+
+// Privkey pre-fund sẵn trong genesis (dev.toml issued_cells) — gán theo node index. CHỈ devnet, không bí mật.
+// Mỗi node có 10 tỷ CKB từ genesis ⇒ mở channel ngay, không cần faucet runtime.
+export const DEV_FUNDED_KEYS = [
+  "1111111111111111111111111111111111111111111111111111111111111111",
+  "2222222222222222222222222222222222222222222222222222222222222222",
+  "3333333333333333333333333333333333333333333333333333333333333333",
+];

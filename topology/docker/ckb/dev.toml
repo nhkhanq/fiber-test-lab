@@ -82,6 +82,24 @@ lock.code_hash = "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3
 lock.args = "0xc8328aabcd9b9e8e64fbc566c4385c3bdeb219d7"
 lock.hash_type = "type"
 
+# Pre-fund node accounts (privkey 0x1111.../0x2222.../0x3333...) — gán theo node index trong nodeConfig.ts.
+# Mỗi node có sẵn 10 tỷ CKB từ genesis ⇒ mở channel được ngay, không cần faucet runtime.
+[[genesis.issued_cells]]
+capacity = 10_000_000_000_00000000
+lock.code_hash = "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8"
+lock.args = "0xf949a9cc83edefcd580eb3f0f3bae187c4d008db"
+lock.hash_type = "type"
+[[genesis.issued_cells]]
+capacity = 10_000_000_000_00000000
+lock.code_hash = "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8"
+lock.args = "0xa1d89d8870b116ec25fb33a8c1f762ae6dcc5238"
+lock.hash_type = "type"
+[[genesis.issued_cells]]
+capacity = 10_000_000_000_00000000
+lock.code_hash = "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8"
+lock.args = "0xbd67a621773f788603d81fec8162329e56d7cfe8"
+lock.hash_type = "type"
+
 [params]
 initial_primary_epoch_reward = 1_917_808_21917808
 secondary_epoch_reward = 613_698_63013698
