@@ -3,7 +3,7 @@ import rawConfig from "../fiber-lab.config";
 
 export const GlobalConfigSchema = z.object({
   pollIntervalMs: z.number().int().positive().default(1000),
-  pollTimeoutMs: z.number().int().positive().default(30_000),
+  pollTimeoutMs: z.number().int().positive().default(60_000),
   dockerNetworkPrefix: z.string().min(1).default("flab"),
   fnnVersion: z.string().min(1),
   /** Mức log. */

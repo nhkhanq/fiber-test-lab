@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { SCENARIOS_DIR } from "../constants";
@@ -27,7 +27,17 @@ export function scenarioPath(name: string): string {
 }
 
 export async function loadScenarioFile(filePath: string): Promise<Scenario> {
-  const raw = await readFile(filePath, "utf8");
+  let raw: string;
+  try {
+    raw = await readFile(filePath, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new ScenarioValidationError(filePath, [
+        { path: "(file)", message: `Không tìm thấy file scenario "${filePath}"` },
+      ]);
+    }
+    throw error;
+  }
 
   let parsed: unknown;
   try {
@@ -62,4 +72,32 @@ export async function loadScenarioFile(filePath: string): Promise<Scenario> {
 
 export function loadScenarioByName(name: string): Promise<Scenario> {
   return loadScenarioFile(scenarioPath(name));
+}
+
+export interface ScenarioSummary {
+  name: string;
+  description: string;
+  valid: boolean;
+  error?: string;
+}
+
+/** Mọi scenario trong `topology/scenarios/`, dùng cho `fiber-lab list`. File lỗi vẫn liệt kê (valid: false). */
+export async function listScenarios(): Promise<ScenarioSummary[]> {
+  const files = await readdir(SCENARIOS_DIR).catch(() => [] as string[]);
+  const summaries: ScenarioSummary[] = [];
+  for (const file of files.filter((f) => /\.ya?ml$/i.test(f)).sort()) {
+    const name = file.replace(/\.ya?ml$/i, "");
+    try {
+      const scenario = await loadScenarioFile(join(SCENARIOS_DIR, file));
+      summaries.push({ name, description: scenario.description, valid: true });
+    } catch (error) {
+      summaries.push({
+        name,
+        description: "",
+        valid: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  return summaries;
 }

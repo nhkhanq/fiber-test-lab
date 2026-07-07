@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import { RUNS_DIR } from "../constants";
@@ -131,6 +131,11 @@ export class RunLogStore {
     return RunLogSchema.parse(JSON.parse(raw));
   }
 
+  /** Nạp lại run-log đã lưu (VD sau `orchestrator.up`) thành store còn ghi tiếp được — dùng cho seed nối tiếp up. */
+  static async resume(runId: string): Promise<RunLogStore> {
+    return new RunLogStore(await RunLogStore.load(runId));
+  }
+
   /** Cập nhật status của 1 run-log đã lưu (VD "reset") mà KHÔNG xoá file — xem BR-CLN-002. */
   static async setStatus(runId: string, status: RunStatus, error?: string): Promise<void> {
     const log = await RunLogStore.load(runId);
@@ -139,4 +144,24 @@ export class RunLogStore {
     if (error !== undefined) log.error = error;
     await writeFile(runLogPath(runId), JSON.stringify(RunLogSchema.parse(log), null, 2), "utf8");
   }
+}
+
+/** Mọi run-log hiện có (mới nhất trước), dùng cho `fiber-lab list`. Run-log hỏng → bỏ qua, không crash. */
+export async function listRuns(): Promise<RunLog[]> {
+  const files = await readdir(RUNS_DIR).catch(() => [] as string[]);
+  const runs: RunLog[] = [];
+  for (const file of files.filter((f) => f.endsWith(".json")).sort()) {
+    try {
+      runs.push(RunLogSchema.parse(JSON.parse(await readFile(join(RUNS_DIR, file), "utf8"))));
+    } catch {
+      continue;
+    }
+  }
+  return runs.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+}
+
+/** Run mới nhất của 1 scenario còn sống (chưa reset) — dùng khi `fiber-lab seed` không có `--run`. */
+export async function latestRunForScenario(scenario: string): Promise<RunLog | null> {
+  const runs = await listRuns();
+  return runs.find((r) => r.scenario === scenario && r.status !== "reset") ?? null;
 }

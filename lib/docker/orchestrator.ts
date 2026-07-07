@@ -159,6 +159,15 @@ export async function startNode(container: string, config: GlobalConfig): Promis
   await waitForReady([container], config);
 }
 
+/** `--keep` CLI hoặc `keepRunOnFailure` global config — giữ container lại để debug khi lỗi (BR-CLN-003). */
+export function shouldKeepOnFailure(config: GlobalConfig, keepFlag?: boolean): boolean {
+  return Boolean(keepFlag) || config.keepRunOnFailure;
+}
+
+function printKeepGuidance(runId: string): void {
+  console.error(`Giữ lại run ${runId} để debug — xem \`fiber-lab logs ${runId}\` hoặc dọn bằng \`fiber-lab reset ${runId}\`.`);
+}
+
 /** Host endpoint (port map tạm) của FNN RPC 1 node, hoặc null nếu chưa map. */
 async function nodeEndpoint(container: string): Promise<string | null> {
   const r = await docker(["port", container, String(FNN_RPC_PORT)]);
@@ -176,8 +185,9 @@ export interface UpResult {
 }
 
 /**
- * Dựng topology cho scenario: sinh run-id + compose động → `docker compose up -d --build`.
- * Lỗi giữa chừng → tự teardown (trừ khi keep). KHÔNG chờ node READY (đó là E3-5).
+ * Dựng topology cho scenario: sinh run-id + compose động → `docker compose up -d --build` → chờ READY.
+ * Lỗi giữa chừng → tự teardown (trừ `--keep`/`keepRunOnFailure`, BR-CLN-001/003). Không chạy seed —
+ * đó là việc của caller (`cli up` gọi tiếp `runSeed` rồi mới finish run-log).
  */
 export async function up(
   scenario: Scenario,
@@ -210,7 +220,8 @@ export async function up(
   if (result.code !== 0) {
     store.finish("failed", result.stderr.trim() || `docker compose up exit ${result.code}`);
     await store.save();
-    if (!opts.keep) await teardown(project.name, network, composeFile);
+    if (shouldKeepOnFailure(config, opts.keep)) printKeepGuidance(runId);
+    else await teardown(project.name, network, composeFile);
     throw new DockerError(`docker compose up thất bại (run ${runId})`, result.stderr);
   }
 
@@ -224,7 +235,8 @@ export async function up(
     const msg = e instanceof Error ? e.message : String(e);
     store.finish("failed", msg);
     await store.save();
-    if (!opts.keep) await teardown(project.name, network, composeFile);
+    if (shouldKeepOnFailure(config, opts.keep)) printKeepGuidance(runId);
+    else await teardown(project.name, network, composeFile);
     throw e;
   }
 
@@ -239,7 +251,8 @@ export async function up(
     }
   }
 
-  store.finish("completed");
+  // Không finish("completed") ở đây — topology đã READY nhưng seed (nếu có) chưa chạy;
+  // caller (CLI `up`) quyết định khi nào run thực sự xong.
   await store.save();
 
   return {
