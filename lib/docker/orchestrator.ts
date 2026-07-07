@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { access, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { GlobalConfig } from "../config";
-import { CKB_SERVICE, WORK_DIR } from "../constants";
+import { CKB_SERVICE, FNN_RPC_PORT, WORK_DIR } from "../constants";
 import { generateNodeConfigs } from "../fiber/nodeConfig";
 import { RunLogStore, type NodeRecord } from "../runlog/store";
 import type { Scenario } from "../scenario/schema";
@@ -146,11 +146,19 @@ export async function waitForReady(containers: string[], config: GlobalConfig): 
   }
 }
 
+/** Host endpoint (port map tạm) của FNN RPC 1 node, hoặc null nếu chưa map. */
+async function nodeEndpoint(container: string): Promise<string | null> {
+  const r = await docker(["port", container, String(FNN_RPC_PORT)]);
+  const port = r.stdout.trim().split("\n")[0]?.match(/:(\d+)$/)?.[1];
+  return port ? `http://127.0.0.1:${port}` : null;
+}
+
 export interface UpResult {
   runId: string;
   project: string;
   network: string;
   nodes: string[];
+  endpoints: Record<string, string>;
   composeFile: string;
 }
 
@@ -207,6 +215,17 @@ export async function up(
     throw e;
   }
 
+  // Resolve host port map cho từng node FNN → endpoints cho seeder/test-kit.
+  const endpoints: Record<string, string> = {};
+  for (const node of scenario.nodes) {
+    const ep = await nodeEndpoint(containerName(config, runId, node));
+    if (ep) {
+      endpoints[node] = ep;
+      const rec = store.data.nodes.find((n) => n.name === node);
+      if (rec) rec.endpoint = ep;
+    }
+  }
+
   store.finish("completed");
   await store.save();
 
@@ -215,6 +234,7 @@ export async function up(
     project: project.name,
     network,
     nodes: scenario.nodes.filter((n) => n !== CKB_SERVICE),
+    endpoints,
     composeFile,
   };
 }

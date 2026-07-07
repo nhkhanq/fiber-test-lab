@@ -36,6 +36,7 @@ interface ComposeService {
   environment?: Record<string, string>;
   volumes?: string[];
   command?: string[];
+  ports?: string[];
   healthcheck: Healthcheck;
 }
 
@@ -132,6 +133,8 @@ export function buildComposeProject(
       },
       volumes: [`${fnnNodeDir(runId, node)}:${FNN_BASE_DIR}`],
       command: ["-d", FNN_BASE_DIR, "-c", `${FNN_BASE_DIR}/config.yml`],
+      // Port map tạm trên localhost (ephemeral) cho seeder/test-kit gọi RPC (BR-ISO-002) — đóng khi teardown.
+      ports: [`127.0.0.1::${FNN_RPC_PORT}`],
       healthcheck: fnnHealthcheck(),
     };
   }
