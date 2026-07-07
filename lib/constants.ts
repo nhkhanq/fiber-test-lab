@@ -5,6 +5,7 @@ export const MIN_CHANNEL_CAPACITY_CKB = 100;
 export const MIN_CHANNEL_RESERVE_CKB = 99;
 
 export const RUNS_DIR = ".fiber-lab/runs";
+export const WORK_DIR = ".fiber-lab/work"; // compose file materialize hoá theo run-id
 export const SCENARIOS_DIR = "topology/scenarios";
 
 // --- Hạ tầng ghim cứng (deterministic — xem decisions-log 2026-07-05 + docs/hands-on/e3-3-infra-research.md) ---
@@ -25,3 +26,8 @@ export const CKB_SERVICE = "ckb";
 export const DOCKER_BUILD_CONTEXT = "topology/docker";
 export const FNN_DOCKERFILE = "fnn.Dockerfile";
 export const CKB_DOCKERFILE = "ckb.Dockerfile";
+
+// FNN per-node: base dir mount trong container, chain spec baked sẵn, password mã hoá key (devnet).
+export const FNN_BASE_DIR = "/fiber-node";
+export const DEV_CHAIN_SPEC = "/flab/dev.toml";
+export const FNN_SECRET_KEY_PASSWORD = "flab-dev";

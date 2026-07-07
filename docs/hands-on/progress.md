@@ -21,8 +21,10 @@
 | **E2-4** lib/runlog/store.ts | ✅ DONE | RunLogStore (zod schema, create/recordRpc/recordStep/finish/save/load). Verify: client→store→file→load OK, JSON khớp schema. HẾT EPIC E2. |
 | **E3-1** zod schema scenario | ✅ DONE | lib/scenario/schema.ts — Channel/SeedStep/Expectation + superRefine (node refs, capacity>=100, reason chỉ khi failed). |
 | **E3-2** loader YAML + zod | ✅ DONE | lib/scenario/loader.ts — parse YAML, safeParse, ScenarioValidationError liệt kê field lỗi, check name khớp file. Sample: topology/scenarios/direct-channel.yaml. |
-| **E3-3** compose động | 🔨 CODE XONG (chờ live-boot) | `topology/compose.template.ts` sinh compose từ scenario+run-id (1 CKB + N FNN, network `flab_<run-id>`, container prefix, không bind host, healthcheck/depends_on). Verify: typecheck + smoke render + `docker compose config` VALID. CKB genesis-custom (`ckb.Dockerfile`+`entrypoint.sh`, fiber-scripts từ FNN v0.8.0) đã viết, PENDING live-boot ở E3-4. |
-| E3-4 → E8 | ⬜ chưa | Kế: E3-4 orchestrator up/down + live-boot CKB genesis. |
+| **E3-3** compose động | ✅ DONE | `topology/compose.template.ts` sinh compose từ scenario+run-id (1 CKB + N FNN, network `flab_<run-id>`, container prefix, không bind host, healthcheck/depends_on). Verify: typecheck + smoke render + `docker compose config` VALID. **CKB genesis-custom LIVE-BOOT OK** (xem dưới). |
+| **E3-4** orchestrator up/down | ✅ DONE | `lib/docker/orchestrator.ts` — `up` (sinh run-id + compose + `docker compose up -d --build`, fail giữa chừng → tự teardown), `teardown`/`reset`/`resetAll` (down -v + fallback xoá theo label + rm network), `reset` đánh dấu run-log `status:reset` (giữ file, BR-CLN-002). Verify LIVE trên Docker: composeUp→network+container tồn tại→teardown→sạch; teardown idempotent; reset marks status. |
+| **E3-5** wait-for-READY + FNN config | ✅ DONE | FNN boot THẬT trên devnet reimplement. `lib/fiber/nodeConfig.ts` sinh config.yml+sk+ckb/key per-node; FNN Dockerfile+entrypoint (bind RPC vào IP private → né biscuit, dev.toml+fiber-scripts baked); compose FNN volume/command/env + healthcheck qua `hostname -i`; orchestrator `waitForReady` poll docker health. Verify LIVE: `up direct-channel` → alice+bob READY 14s, node_info.chain_hash=devnet mình → reset sạch. |
+| E3-6 → E8 | ⬜ chưa | Kế: E3-6 seeder (open_channel/send_payment/new_invoice) + faucet cấp tiền node. |
 
 ## Mốc dữ liệu đã chốt (thật, không đoán)
 
@@ -43,20 +45,54 @@
 - **CHỌN B2:** tải fiber-scripts compiled từ **repo FNN tag v0.8.0** (`tests/deploy/contracts/`) — cùng version FNN đã pin, deterministic. Chi tiết: `e3-3-infra-research.md` §"Sub-decision ĐÃ GIẢI".
 - **CKB pin:** `nervos/ckb:v0.207.0` (bản pair với offckb 0.4.7). → Cần human confirm 3 mục này trước khi append decisions-log.
 
-## ⏸️ ĐIỂM DỪNG — làm tiếp ở E3-4
+## ✅ CKB genesis-custom — LIVE-BOOT VERIFIED (2026-07-06)
 
-**E3-3 code đã xong + verify** (typecheck, smoke render, `docker compose config` VALID):
-- `topology/compose.template.ts` — `buildComposeProject(scenario, runId, config)` + `renderComposeYaml`.
-- `lib/constants.ts` — thêm pin hạ tầng (CKB image/version, cổng FNN/CKB, build context).
-- `topology/docker/ckb.Dockerfile` + `topology/docker/ckb/entrypoint.sh` — CKB genesis-custom (fiber-scripts từ FNN v0.8.0).
+Build + boot `topology/docker/ckb.Dockerfile` standalone:
+- Image build OK (fiber-scripts tải từ FNN v0.8.0 tag ổn).
+- `ckb run` khởi động, RPC `get_tip_block_number` trả `0x0` → miner chạy → tip tiến **0x0→0x4** (dummy pow),
+  ⇒ key faucet sẽ có tiền để cấp cho node.
+- Genesis tx[0] có **14 output system-cell** (4 chuẩn từ `ckb init -c dev` + 5 fiber: auth/funding-lock/
+  commitment-lock/simple_udt/xudt_rce nhúng thành công — genesis dựng được ⇒ file script hợp lệ).
+- ⚠️ Còn PENDING: đối chiếu `create_type_id`/thứ tự cell với FNN `node_info.default_funding_lock_script`
+  (chỉ chốt được khi FNN kết nối vào — thuộc E3-5).
 
-**👉 Việc kế (E3-4 — orchestrator up/down):**
-1. **Live-boot CKB genesis** — `docker compose build` + `up` CKB service, xác nhận genesis khởi động, kiểm `node_info.default_funding_lock_script` để chốt `create_type_id`/thứ tự cell fiber trong `entrypoint.sh`.
-2. Sinh FNN per-node config (key, cell_deps từ genesis out-point, peers) — mắt xích để FNN boot & discover.
-3. Faucet: phân phối CKB từ miner key → từng node (đủ mở channel).
-4. `lib/docker/orchestrator.ts` — `up`/`down` compose động, teardown sạch theo run-id.
+## ⏸️ ĐIỂM DỪNG — E3-5 XONG, làm tiếp ở E3-6 (seeder + faucet)
 
-**Git:** đã merge PR #43 vào `main`. Branch mới off `canary` cho E3-3.
+**E3-5 DONE (2026-07-07):** FNN boot thật trên CKB devnet reimplement. Recipe FNN devnet đã chốt:
+- Config FNN devnet KHÔNG cần scripts section (đọc từ chain spec). `fiber.chain: /flab/dev.toml` (baked).
+- FNN RPC phải bind IP private container (không 0.0.0.0) để né biscuit auth → entrypoint `hostname -i`.
+- Mỗi node: base dir mount (`config.yml` + `fiber/sk` 32B + `ckb/key` hex), env `FIBER_SECRET_KEY_PASSWORD`.
+- `up direct-channel` → alice+bob READY 14s (verify node_info), reset sạch.
+
+**👉 Việc kế (E3-6 — seeder):** faucet cấp CKB từ account `0xc8328aab…` (20 tỷ, privkey `d00c06bf…`) →
+mỗi node (dùng ckb/key đã sinh); connect_peer; open_channel + poll ChannelReady (BR-POL-002);
+send_payment/new_invoice; ghi mọi RPC vào run-log qua FiberClient logger. Cần port-map RPC ra host cho
+FiberClient (ngoài docker) — hoặc gọi qua `docker exec`. Xem `.context/business-rules` BR-SEED-*.
+
+---
+### (cũ) ⏸️ ĐIỂM DỪNG — làm tiếp ở E3-5
+
+**E3-3 + E3-4 xong + verify** (typecheck + smoke + live Docker). Files:
+- `topology/compose.template.ts`, `lib/constants.ts` (pin hạ tầng + WORK_DIR).
+- `topology/docker/ckb.Dockerfile` + `ckb/entrypoint.sh` (genesis-custom, đã live-boot + fix determinism).
+- `lib/docker/orchestrator.ts` (`up`/`teardown`/`reset`/`resetAll` + `composeUp` seam).
+- `lib/runlog/store.ts` — thêm `setStatus` (đánh dấu reset không xoá file).
+
+**Genesis determinism DONE (2026-07-06):** fix `genesis_cell.message` (ghim `flab-devnet`) → genesis/out-point
+deterministic giữa các boot. Đã trích **code_hash + index** 5 cell fiber (cellbase `0x7dcd6cec…`) — xem
+`e3-3-infra-research.md` §Live-boot. ⇒ E3-5 step 1 "chốt create_type_id" coi như đã có dữ liệu.
+
+**👉 Việc kế (E3-5 — wait-for-READY + FNN config):**
+- ✅ **Genesis align fiber devnet DONE (2026-07-06):** rewrite `ckb/entrypoint.sh` → dev.toml khớp
+  `tests/nodes/deployer/dev.toml` (create_type_id=false, message ckb_dev, faucet 20 tỷ CKB tới
+  `0xc8328aab…` privkey `d00c06bf…`). Verify live: boot OK, cells index auth=5/funding=6/commitment=7/
+  sudt=8/xudt=9, faucet balance = 20 tỷ. Config FNN devnet KHÔNG cần scripts section (đọc từ chain spec).
+1. **Share dev.toml + /fiber-scripts sang FNN container** (volume) → FNN config.yml (`fiber.chain: dev.toml`,
+   `ckb.rpc_url: http://ckb:8114`, rpc `0.0.0.0:8227`) + sinh secret key → boot FNN thật.
+2. Đối chiếu `node_info.default_funding_lock_script` == data-hash funding-lock; poll node_info READY (BR-POL-001).
+3. Faucet: phân phối CKB từ account faucet (đã nạp 20 tỷ trong genesis) → từng node.
+
+**Git:** E3-3 = PR #44 (→ canary). E3-4 + genesis-determinism-fix trên branch `feat/e3-4-orchestrator`.
 
 ## Đã hoàn thành (E0–E3-2 + E3-3 code)
 

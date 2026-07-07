@@ -69,5 +69,48 @@ FNN không chạy được trên một CKB devnet trống. Nó cần:
 - `topology/docker/ckb/entrypoint.sh`: `ckb init -c dev` (sinh genesis chuẩn) → **append** `[[genesis.system_cells]]`
   trỏ `/fiber-scripts/*` (mô hình hoá theo fiber `tests/deploy/init-dev-chain.sh`, tự viết) → `ckb run` + dummy miner.
   Miner mint về key faucet (offckb ckb-miner key), cellbase_maturity=0 → orchestrator faucet phân phối (E3-4).
-- ⚠️ **PENDING E3-4 live-boot:** xác nhận `create_type_id` + thứ tự cell fiber khớp FNN devnet config
-  (đối chiếu `node_info.default_funding_lock_script`), và bước faucet cấp tiền từng node.
+- ✅ **LIVE-BOOT OK (2026-07-06):** build + `ckb run` chạy, RPC trả tip, miner tiến block,
+  genesis nhúng 5 fiber cell thành công (14 output system-cell ở genesis tx).
+
+## Live-boot validation (2026-07-06) — ĐÃ KIỂM CHỨNG
+
+CKB genesis-custom **boot OK**, 5 cell fiber nhúng đúng genesis (cellbase tx[0]), miner đào block.
+
+**Bug determinism đã tìm+fix:** `ckb init` đặt `[genesis.genesis_cell] message = "<timestamp ms>"` → genesis hash
++ cellbase tx hash (out-point) đổi mỗi boot. Fix: entrypoint `sed` ghim `message = "flab-devnet"`.
+→ 2 boot mới toanh giờ ra genesis + cellbase **giống hệt** (verified).
+
+**Toạ độ genesis deterministic (dùng cho FNN devnet config):**
+- genesis hash = `0x4a7748e5e80e2857dfd672aba868eb2e49e3bb1bd3e8fd29e253c8273fbee4b1`
+- cellbase tx (out-point cho mọi cell dưới) = `0x7dcd6cec1dfc252ed7d2a96abc44f4cc549d9dd576db0763115f1c844a17c886`
+- code_hash = hash type-id script (hash_type: "type"):
+
+| Cell | out_point index | code_hash (type) |
+|---|---|---|
+| auth | 5 | `0x6283a479a3cf5d4276cd93594de9f1827ab9b55c7b05b3d28e4c2e0a696cfefd` |
+| funding-lock | 6 | `0x1a1e4fef34f5982906f745b048fe7b1089647e82346074e0f32c2ece26cf6b1e` |
+| commitment-lock | 7 | `0x9c6933d977360f115a3e9cd5a2e0e475853681b80d775d93ad0f8969da343e56` |
+| simple_udt | 8 | `0xe09352af0066f3162287763ce4ddba9af6bfaeab198dc7ab37f8c71c9e68bb5b` |
+| xudt_rce | 9 | `0xbb4469004225b39e983929db71fe2253cba1d49a76223e9e1d212cdca1f79f28` |
+
+## E3-5 correction (2026-07-06) — ALIGN genesis theo fiber devnet chuẩn
+
+Đọc `nervosnetwork/fiber` v0.8.0 `tests/nodes/deployer/{dev.toml,config.yml}` + `tests/deploy/init-dev-chain.sh`:
+- **Config FNN devnet KHÔNG có `scripts:` section** — chỉ `fiber.chain: dev.toml`. FNN **đọc fiber scripts trực
+  tiếp từ chain spec (dev.toml) theo convention thứ tự cell genesis**. ⇒ genesis phải khớp cấu trúc fiber devnet.
+- Fiber dùng `create_type_id = false` (data-hash), `message = "ckb_dev"`, account faucet nạp sẵn trong genesis.
+
+→ **Rewrite `entrypoint.sh`**: sinh dev.toml khớp fiber devnet (thay bản ad-hoc create_type_id=true trước đó):
+  4 system cell chuẩn + 5 fiber cell (`create_type_id=false`, order auth/funding-lock/commitment-lock/simple_udt/xudt_rce)
+  + issued_cell faucet **20 tỷ CKB** tới `0xc8328aab…` (secp256k1 sighash `0x9bd7e06f…`, privkey
+  `d00c06bfd800d27397002dca6fb0993d5ba6399b4238b2f29ee9deb97593d2bc`), `cellbase_maturity=0`, dummy pow.
+
+**Verified live (2026-07-06):** genesis boot OK, miner chạy; fiber cells ở genesis cellbase index
+**auth=5, funding-lock=6, commitment-lock=7, simple_udt=8, xudt_rce=9** (index 0 = genesis message cell);
+faucet account có `0x1bc16d674ec80000` = **20 tỷ CKB**. dev.toml tĩnh hoàn toàn ⇒ deterministic.
+data-hash funding/commitment-lock: verify qua `node_info.default_funding_lock_script` khi FNN boot.
+
+⚠️ Bảng type-id code_hash ở section trên (create_type_id=true) **ĐÃ BỎ** — cells giờ data-hash based.
+
+**Còn lại (E3-5):** share dev.toml + /fiber-scripts sang FNN container → FNN config.yml (`fiber.chain: dev.toml`,
+`ckb.rpc_url: http://ckb:8114`, rpc `0.0.0.0:8227`) + secret key → boot FNN → poll node_info READY + faucet.

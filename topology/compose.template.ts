@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { stringify } from "yaml";
 import type { GlobalConfig } from "../lib/config";
 import type { Scenario } from "../lib/scenario/schema";
@@ -6,9 +7,17 @@ import {
   CKB_RPC_PORT,
   CKB_SERVICE,
   DOCKER_BUILD_CONTEXT,
+  FNN_BASE_DIR,
   FNN_DOCKERFILE,
   FNN_RPC_PORT,
+  FNN_SECRET_KEY_PASSWORD,
+  WORK_DIR,
 } from "../lib/constants";
+
+/** Base dir host của 1 node FNN (mount vào container). Absolute để docker compose nhận. */
+export function fnnNodeDir(runId: string, node: string): string {
+  return join(process.cwd(), WORK_DIR, runId, "nodes", node);
+}
 
 interface Healthcheck {
   test: string[];
@@ -25,6 +34,8 @@ interface ComposeService {
   restart: string;
   depends_on?: Record<string, { condition: string }>;
   environment?: Record<string, string>;
+  volumes?: string[];
+  command?: string[];
   healthcheck: Healthcheck;
 }
 
@@ -61,15 +72,16 @@ function ckbHealthcheck(): Healthcheck {
 
 function fnnHealthcheck(): Healthcheck {
   const body = '{"jsonrpc":"2.0","method":"node_info","params":[],"id":1}';
+  // FNN bind RPC vào IP private container (không localhost) ⇒ healthcheck curl theo hostname -i.
   return {
     test: [
       "CMD-SHELL",
-      `curl -sf -H 'content-type: application/json' -d '${body}' http://localhost:${FNN_RPC_PORT} || exit 1`,
+      `curl -sf -H 'content-type: application/json' -d '${body}' http://$(hostname -i | awk '{print $1}'):${FNN_RPC_PORT} || exit 1`,
     ],
     interval: "3s",
     timeout: "5s",
-    retries: 20,
-    start_period: "10s",
+    retries: 30,
+    start_period: "15s",
   };
 }
 
@@ -115,9 +127,11 @@ export function buildComposeProject(
       restart: "unless-stopped",
       depends_on: { [CKB_SERVICE]: { condition: "service_healthy" } },
       environment: {
-        FNN_NODE_NAME: node,
-        CKB_RPC_URL: `http://${CKB_SERVICE}:${CKB_RPC_PORT}`,
+        FIBER_SECRET_KEY_PASSWORD: FNN_SECRET_KEY_PASSWORD,
+        FNN_RPC_PORT: String(FNN_RPC_PORT),
       },
+      volumes: [`${fnnNodeDir(runId, node)}:${FNN_BASE_DIR}`],
+      command: ["-d", FNN_BASE_DIR, "-c", `${FNN_BASE_DIR}/config.yml`],
       healthcheck: fnnHealthcheck(),
     };
   }
