@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import { RUNS_DIR } from "../constants";
@@ -139,4 +139,18 @@ export class RunLogStore {
     if (error !== undefined) log.error = error;
     await writeFile(runLogPath(runId), JSON.stringify(RunLogSchema.parse(log), null, 2), "utf8");
   }
+}
+
+/** Mọi run-log hiện có (mới nhất trước), dùng cho `fiber-lab list`. Run-log hỏng → bỏ qua, không crash. */
+export async function listRuns(): Promise<RunLog[]> {
+  const files = await readdir(RUNS_DIR).catch(() => [] as string[]);
+  const runs: RunLog[] = [];
+  for (const file of files.filter((f) => f.endsWith(".json")).sort()) {
+    try {
+      runs.push(RunLogSchema.parse(JSON.parse(await readFile(join(RUNS_DIR, file), "utf8"))));
+    } catch {
+      continue;
+    }
+  }
+  return runs.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
 }
