@@ -99,6 +99,26 @@ async function waitChannelReady(
   }
 }
 
+interface ResolvedNode {
+  pubkey: string;
+  address: string;
+}
+
+/** node_info cho mọi node → pubkey + address dial được (SDK canary lệch field FNN 0.8 nên dùng rawCall). */
+async function resolveNodes(
+  scenario: Scenario,
+  client: FiberClient,
+): Promise<Record<string, ResolvedNode>> {
+  const resolved: Record<string, ResolvedNode> = {};
+  for (const node of scenario.nodes) {
+    const info = (await client.rawCall(node, "node_info")) as { pubkey: string; addresses: string[] };
+    // /dns4/<node>/... resolve qua docker DNS — addresses[0] thường là 0.0.0.0 không dial được.
+    const address = info.addresses.find((a) => a.startsWith("/dns4/")) ?? info.addresses[0] ?? "";
+    resolved[node] = { pubkey: info.pubkey, address };
+  }
+  return resolved;
+}
+
 /**
  * Thực thi phần `channels` + `seed` của scenario qua FiberClient (mọi RPC đã log vào run-log).
  * Node đã READY (orchestrator chờ trước). runId cần để derive tên container cho kill_node/start_node.
@@ -110,23 +130,33 @@ export async function runSeed(
   config: GlobalConfig,
   runId: string,
 ): Promise<void> {
-  const pubkey: Record<string, string> = {};
-  const address: Record<string, string> = {};
-  for (const node of scenario.nodes) {
-    // raw node_info: SDK canary map field lệch FNN 0.8 (pubkey→nodeId undefined).
-    const info = (await client.rawCall(node, "node_info")) as { pubkey: string; addresses: string[] };
-    pubkey[node] = info.pubkey;
-    // Chọn address /dns4/<node>/... (resolve qua docker DNS) — addresses[0] thường là 0.0.0.0 không dial được.
-    address[node] = info.addresses.find((a) => a.startsWith("/dns4/")) ?? info.addresses[0] ?? "";
-  }
+  const nodes = await resolveNodes(scenario, client);
 
   for (const ch of scenario.channels) {
-    await client.connectPeer(ch.from, { address: address[ch.to]! });
-    await waitForPeer(client, ch.from, pubkey[ch.to]!, config);
-    await openChannel(client, ch.from, pubkey[ch.to]!, ch.capacity, config);
-    await waitChannelReady(client, ch.from, pubkey[ch.to]!, config);
+    await client.connectPeer(ch.from, { address: nodes[ch.to]!.address });
+    await waitForPeer(client, ch.from, nodes[ch.to]!.pubkey, config);
+    await openChannel(client, ch.from, nodes[ch.to]!.pubkey, ch.capacity, config);
+    await waitChannelReady(client, ch.from, nodes[ch.to]!.pubkey, config);
     store.recordStep("open_channel", { from: ch.from, to: ch.to, capacity: ch.capacity }, { ready: true });
   }
+
+  await runSeedSteps(scenario, client, store, config, runId, nodes);
+}
+
+/**
+ * Chỉ chạy các `seed` step (không mở channel) — dùng cho lệnh `fiber-lab seed` chạy lại trên run đang chạy.
+ * Tự resolve node_info nếu chưa có (VD gọi độc lập, không đi qua `runSeed`).
+ */
+export async function runSeedSteps(
+  scenario: Scenario,
+  client: FiberClient,
+  store: RunLogStore,
+  config: GlobalConfig,
+  runId: string,
+  resolved?: Record<string, ResolvedNode>,
+): Promise<void> {
+  const nodes = resolved ?? (await resolveNodes(scenario, client));
+  const pubkey = Object.fromEntries(Object.entries(nodes).map(([n, r]) => [n, r.pubkey]));
 
   for (const step of scenario.seed) {
     switch (step.action) {

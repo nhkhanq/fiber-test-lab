@@ -159,3 +159,9 @@ export async function listRuns(): Promise<RunLog[]> {
   }
   return runs.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
 }
+
+/** Run mới nhất của 1 scenario còn sống (chưa reset) — dùng khi `fiber-lab seed` không có `--run`. */
+export async function latestRunForScenario(scenario: string): Promise<RunLog | null> {
+  const runs = await listRuns();
+  return runs.find((r) => r.scenario === scenario && r.status !== "reset") ?? null;
+}
