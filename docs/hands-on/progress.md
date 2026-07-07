@@ -24,7 +24,8 @@
 | **E3-3** compose động | ✅ DONE | `topology/compose.template.ts` sinh compose từ scenario+run-id (1 CKB + N FNN, network `flab_<run-id>`, container prefix, không bind host, healthcheck/depends_on). Verify: typecheck + smoke render + `docker compose config` VALID. **CKB genesis-custom LIVE-BOOT OK** (xem dưới). |
 | **E3-4** orchestrator up/down | ✅ DONE | `lib/docker/orchestrator.ts` — `up` (sinh run-id + compose + `docker compose up -d --build`, fail giữa chừng → tự teardown), `teardown`/`reset`/`resetAll` (down -v + fallback xoá theo label + rm network), `reset` đánh dấu run-log `status:reset` (giữ file, BR-CLN-002). Verify LIVE trên Docker: composeUp→network+container tồn tại→teardown→sạch; teardown idempotent; reset marks status. |
 | **E3-5** wait-for-READY + FNN config | ✅ DONE | FNN boot THẬT trên devnet reimplement. `lib/fiber/nodeConfig.ts` sinh config.yml+sk+ckb/key per-node; FNN Dockerfile+entrypoint (bind RPC vào IP private → né biscuit, dev.toml+fiber-scripts baked); compose FNN volume/command/env + healthcheck qua `hostname -i`; orchestrator `waitForReady` poll docker health. Verify LIVE: `up direct-channel` → alice+bob READY 14s, node_info.chain_hash=devnet mình → reset sạch. |
-| E3-6 → E8 | ⬜ chưa | Kế: E3-6 seeder (open_channel/send_payment/new_invoice) + faucet cấp tiền node. |
+| **E3-6** seeder | ✅ DONE | `lib/scenario/seeder.ts` — connect_peer → open_channel → poll ChannelReady → send_payment (poll get_payment tới Success) + new_invoice; faucet = pre-fund genesis (3 key cố định, 10 tỷ CKB/node). FiberClient thêm `rawCall` (SDK canary lệch FNN 0.8: node_info/open_channel/list_peers dùng field khác). Verify LIVE `direct-channel`: **100 CKB settle** (alice 401→301, bob 0→100), 27 RPC logged, reset sạch. Cũng chứng minh E5-1. |
+| E3-7 → E8 | ⬜ chưa | Kế: E3-7 seeder kill_node/start_node/wait. |
 
 ## Mốc dữ liệu đã chốt (thật, không đoán)
 
@@ -56,7 +57,22 @@ Build + boot `topology/docker/ckb.Dockerfile` standalone:
 - ⚠️ Còn PENDING: đối chiếu `create_type_id`/thứ tự cell với FNN `node_info.default_funding_lock_script`
   (chỉ chốt được khi FNN kết nối vào — thuộc E3-5).
 
-## ⏸️ ĐIỂM DỪNG — E3-5 XONG, làm tiếp ở E3-6 (seeder + faucet)
+## ⏸️ ĐIỂM DỪNG — E3-6 XONG (direct-channel payment settle), làm tiếp E3-7
+
+**E3-6 DONE (2026-07-07):** seeder chạy trọn direct-channel, payment 100 CKB settle thật. Chốt quan trọng:
+- **Faucet = pre-fund genesis** (không faucet runtime): 3 key cố định `0x1111/2222/3333` (lock args f949/a1d8/bd67),
+  mỗi node 10 tỷ CKB từ dev.toml issued_cells, gán theo node index.
+- **SDK canary @ckb-ccc/fiber LỆCH FNN 0.8 nhiều field** → FiberClient.rawCall (JSON-RPC thô):
+  node_info trả `pubkey` (SDK đọc `node_id`→undefined); open_channel đòi `pubkey` (SDK gửi `peer_id`);
+  list_channels/list_peers field snake. connect_peer/send_payment/new_invoice OK qua raw.
+- **connect_peer phải dùng address `/dns4/<node>/...`** (addresses[0] là 0.0.0.0 không dial được); chờ list_peers có peer trước open.
+- send_payment async → poll get_payment tới Success/Failed (catch lỗi để scenario fail-case vẫn record).
+
+**👉 Việc kế (E3-7):** seeder `kill_node`/`start_node` (docker kill/start theo container run-id) + `wait`.
+Sau đó E4 (CLI commander) wire up→seed→run-log, E5 scenarios, E6 test-kit.
+
+---
+### (cũ) ĐIỂM DỪNG — E3-5 XONG
 
 **E3-5 DONE (2026-07-07):** FNN boot thật trên CKB devnet reimplement. Recipe FNN devnet đã chốt:
 - Config FNN devnet KHÔNG cần scripts section (đọc từ chain spec). `fiber.chain: /flab/dev.toml` (baked).
