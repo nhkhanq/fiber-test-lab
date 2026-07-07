@@ -1,8 +1,10 @@
 import type { Command } from "commander";
 import { loadConfig } from "../../lib/config";
+import { EXIT_CODES } from "../../lib/constants";
+import { CliError } from "../../lib/errors";
 import { FiberClient } from "../../lib/fiber/client";
 import { RunLogStore, latestRunForScenario, type RunLog } from "../../lib/runlog/store";
-import { ScenarioValidationError, loadScenarioByName } from "../../lib/scenario/loader";
+import { loadScenarioByName } from "../../lib/scenario/loader";
 import { runSeedSteps } from "../../lib/scenario/seeder";
 
 function endpointsOf(log: RunLog): Record<string, string> {
@@ -20,25 +22,19 @@ export function registerSeedCommand(program: Command): void {
     .action(async (scenarioName: string, opts: { run?: string; json?: boolean }) => {
       const config = loadConfig();
 
-      const scenario = await loadScenarioByName(scenarioName).catch((error) => {
-        if (!(error instanceof ScenarioValidationError)) throw error;
-        console.error(error.message);
-        process.exitCode = 1;
-        return null;
-      });
-      if (!scenario) return;
+      // Scenario sai schema → ScenarioValidationError bubble → exit 1.
+      const scenario = await loadScenarioByName(scenarioName);
 
       const log = opts.run
         ? await RunLogStore.load(opts.run).catch(() => null)
         : await latestRunForScenario(scenarioName);
       if (!log) {
-        console.error(
+        throw new CliError(
           opts.run
             ? `Không tìm thấy run-log "${opts.run}".`
             : `Không có run đang chạy cho scenario "${scenarioName}" — chạy \`fiber-lab up ${scenarioName}\` trước.`,
+          EXIT_CODES.validation,
         );
-        process.exitCode = 1;
-        return;
       }
 
       const store = await RunLogStore.resume(log.runId);
@@ -51,9 +47,7 @@ export function registerSeedCommand(program: Command): void {
         const message = error instanceof Error ? error.message : String(error);
         store.finish("failed", message);
         await store.save();
-        console.error(message);
-        process.exitCode = 2;
-        return;
+        throw new CliError(message, EXIT_CODES.runtime);
       }
       await store.save();
 
