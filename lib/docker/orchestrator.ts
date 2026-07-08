@@ -164,7 +164,7 @@ export function shouldKeepOnFailure(config: GlobalConfig, keepFlag?: boolean): b
   return Boolean(keepFlag) || config.keepRunOnFailure;
 }
 
-function printKeepGuidance(runId: string): void {
+export function printKeepGuidance(runId: string): void {
   console.error(`Giữ lại run ${runId} để debug — xem \`fiber-lab logs ${runId}\` hoặc dọn bằng \`fiber-lab reset ${runId}\`.`);
 }
 
