@@ -11,6 +11,9 @@
   "bin": {
     "fiber-lab": "cli/index.ts"
   },
+  "exports": {
+    "./test-kit": "./test-kit/index.ts"
+  },
   "scripts": {
     "lab": "tsx cli/index.ts",
     "typecheck": "tsc --noEmit",
