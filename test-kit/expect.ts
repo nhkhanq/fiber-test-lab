@@ -1,4 +1,5 @@
 import { loadConfig } from "../lib/config";
+import { MIN_CHANNEL_RESERVE_CKB, SHANNON_PER_CKB } from "../lib/constants";
 import { runLogPath } from "../lib/runlog/store";
 import { mapError } from "../lib/scenario/errorCategory";
 import type { ErrorCategory } from "../lib/scenario/schema";
@@ -76,5 +77,57 @@ async function assertReason(ctx: ScenarioContext, message: string, reason?: Erro
   const actual = mapError(message);
   if (actual !== reason) {
     await fail(ctx, `expectPaymentFails: reason "${actual ?? "unknown"}" ≠ mong "${reason}" (raw: ${message.slice(0, 120)})`);
+  }
+}
+
+export interface ChannelStateExpectation {
+  status?: string; // state_name, VD "ChannelReady"
+  capacity?: number; // funding capacity (CKB)
+}
+
+interface ChannelInfo {
+  channel_id: string;
+  state: { state_name: string };
+  local_balance: string;
+  remote_balance: string;
+}
+
+async function findChannel(ctx: ScenarioContext, channelId: string): Promise<ChannelInfo | null> {
+  for (const node of ctx.scenario.nodes) {
+    const res = (await ctx.call(node, "list_channels", [{}])) as { channels: ChannelInfo[] };
+    const channel = res.channels.find((c) => c.channel_id === channelId);
+    if (channel) return channel;
+  }
+  return null;
+}
+
+/**
+ * Assert state_name và/hoặc capacity của 1 channel (poll list_channels tới khi status khớp).
+ * capacity = local + remote + reserve (list_channels KHÔNG có field funding; kênh single-funded ⇒ 1 reserve).
+ */
+export async function expectChannelState(
+  ctx: ScenarioContext,
+  channelId: string,
+  expected: ChannelStateExpectation,
+): Promise<void> {
+  const config = loadConfig();
+  const deadline = Date.now() + config.pollTimeoutMs;
+
+  let channel = await findChannel(ctx, channelId);
+  while (expected.status !== undefined && channel?.state.state_name !== expected.status && Date.now() < deadline) {
+    await sleep(config.pollIntervalMs);
+    channel = await findChannel(ctx, channelId);
+  }
+
+  if (!channel) await fail(ctx, `expectChannelState: không tìm thấy channel ${channelId.slice(0, 12)}…`);
+  if (expected.status !== undefined && channel!.state.state_name !== expected.status) {
+    await fail(ctx, `expectChannelState: state "${channel!.state.state_name}" ≠ mong "${expected.status}"`);
+  }
+  if (expected.capacity !== undefined) {
+    const balances = BigInt(channel!.local_balance) + BigInt(channel!.remote_balance);
+    const capacity = Number(balances / SHANNON_PER_CKB) + MIN_CHANNEL_RESERVE_CKB;
+    if (capacity !== expected.capacity) {
+      await fail(ctx, `expectChannelState: capacity ${capacity} CKB ≠ mong ${expected.capacity} CKB`);
+    }
   }
 }

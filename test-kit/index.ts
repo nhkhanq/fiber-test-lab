@@ -1,2 +1,7 @@
 export { setupScenario, type ScenarioContext } from "./context";
-export { expectPaymentSucceeds, expectPaymentFails } from "./expect";
+export {
+  expectPaymentSucceeds,
+  expectPaymentFails,
+  expectChannelState,
+  type ChannelStateExpectation,
+} from "./expect";
