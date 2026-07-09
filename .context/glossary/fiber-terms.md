@@ -59,8 +59,17 @@ JSON-RPC 2.0 của FNN. Các method chính Test Lab gọi:
 Stablecoin trên CKB testnet (dạng UDT). Dùng cho kịch bản multi-asset (v2 stretch).
 
 ## ErrorCategory (mã lỗi chuẩn hoá của Test Lab)
-Tập mã lỗi Test Lab dùng trong `expect.reason`. **Chưa verify với node thật** — sẽ chốt sau khi thực hành (Bước 0) và đọc source FNN. Danh sách khởi điểm:
+Tập mã lỗi Test Lab dùng trong `expect.reason`. Danh sách:
 `insufficient_outbound`, `insufficient_inbound`, `no_route_found`, `peer_offline`, `invoice_expired`, `amount_out_of_range`, `asset_mismatch`, `channel_not_ready`, `reserve_violation`.
+
+FNN luôn trả JSON-RPC `code: -32000` (generic) nên phải phân loại bằng **substring của `message`** — xem `lib/scenario/errorCategory.ts::mapError()` và `docs/hands-on/rpc-notebook.md` §8/§9. Mapping ĐÃ verify với node thật (FNN 0.8.0):
+
+| ErrorCategory | Substring trong message (raw) | Verify tại |
+|---|---|---|
+| `insufficient_outbound` | `Insufficient balance` / `max outbound liquidity … is insufficient` | E0-5, E5-3 |
+| `no_route_found` | `PathFind error: no path found` | E5-2 |
+
+Các loại còn lại (`peer_offline`, `invoice_expired`, `amount_out_of_range`, `asset_mismatch`, `channel_not_ready`, `reserve_violation`, `insufficient_inbound`) **chưa verify** — bổ sung khi scenario E8 gặp lỗi thật. Chốt chính thức vào `decisions-log.md` cần human confirm.
 
 ---
 

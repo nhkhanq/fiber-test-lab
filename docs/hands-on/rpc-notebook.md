@@ -126,15 +126,15 @@ Kịch bản: kênh alice→bob, alice tiêu được 301 CKB, trả invoice 400
 - `30100000000` = 301 CKB (max outbound), `40000000000` = 400 CKB (required). **Số trong message là DECIMAL** (field RPC khác thì hex — coi chừng).
 - `code: -32000` = generic, KHÔNG phân biệt loại lỗi. Phải **parse `message`** để phân loại.
 
-### Mapping raw error → ErrorCategory (bắt đầu cho E5-4)
-| Chuỗi trong message | ErrorCategory | Scenario |
+### Mapping raw error → ErrorCategory (E5-4 — `lib/scenario/errorCategory.ts::mapError()`)
+| Chuỗi trong message | ErrorCategory | Verify |
 |---|---|---|
-| "Failed to build route" + "Insufficient balance" + "max outbound liquidity ... insufficient" | `insufficient_outbound` | insufficient-capacity (E5-3) |
-| "Failed to build route" + "PathFind error: no path found" | `no_route_found` | two-hop khi gossip chưa lan (E5-2) |
+| "Failed to build route" + "Insufficient balance" / "max outbound liquidity ... insufficient" | `insufficient_outbound` | E0-5 (invoice), E5-3 (keysend) ✅ |
+| "Failed to build route" + "PathFind error: no path found" | `no_route_found` | E5-2 ✅ |
 | (TODO) invoice expired | `invoice_expired` | expired-invoice (E8-1) |
 | (TODO) peer offline / connection | `peer_offline` | peer-offline (E8-2) |
 
-→ Hàm `mapError()` trong lib phải match theo substring của message (vì code luôn -32000).
+→ `mapError()` match theo substring của message (code luôn -32000). E5-3 xác nhận keysend cho CÙNG error như E0-5 invoice: `max outbound liquidity 40100000000 is insufficient, required amount: 45000000000` (401 CKB outbound < 450 CKB trả, kênh cap 500).
 
 ## 9. Multi-hop routing (E5-2) — graph gossip + fee
 
