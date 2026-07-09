@@ -130,11 +130,19 @@ Kịch bản: kênh alice→bob, alice tiêu được 301 CKB, trả invoice 400
 | Chuỗi trong message | ErrorCategory | Scenario |
 |---|---|---|
 | "Failed to build route" + "Insufficient balance" + "max outbound liquidity ... insufficient" | `insufficient_outbound` | insufficient-capacity (E5-3) |
-| (TODO) no route / no path | `no_route_found` | — |
+| "Failed to build route" + "PathFind error: no path found" | `no_route_found` | two-hop khi gossip chưa lan (E5-2) |
 | (TODO) invoice expired | `invoice_expired` | expired-invoice (E8-1) |
 | (TODO) peer offline / connection | `peer_offline` | peer-offline (E8-2) |
 
 → Hàm `mapError()` trong lib phải match theo substring của message (vì code luôn -32000).
+
+## 9. Multi-hop routing (E5-2) — graph gossip + fee
+
+- `graph_channels` params `[{}]` → `{ channels: [{ node1, node2, ... }] }`; `graph_nodes` → `{ nodes: [{ node_id, node_name }] }`. Đây là **graph mà node đó đã học qua gossip** (khác `list_channels` = kênh của chính node).
+- Node chỉ tự biết kênh của MÌNH ngay; kênh của node khác (vd alice học `bob↔charlie`) phải chờ **gossip lan**.
+- **Gossip interval mặc định FNN = 60s** (`--fiber-gossip-network-maintenance-interval-ms`, default 60000; store 20000). Không có bootnode như demo-startup ⇒ alice học `bob→charlie` mất >60s → `send_payment` sớm fail `no path found`. **Fix:** set env `FIBER_GOSSIP_NETWORK_MAINTENANCE_INTERVAL_MS`/`..._STORE_...` = 2000 trong compose ⇒ lan ~vài giây, multi-hop tất định.
+- `send_payment` multi-hop giống direct (keysend + target_pubkey) — FNN tự build route nếu graph có path.
+- **fee phân biệt hop:** kênh trực tiếp `fee: 0x0`; qua 1 hop trung gian (bob) `fee: 0x989680` = 10,000,000 shannon = 0.1 CKB (= 0.1% × 100 CKB, khớp `tlc_fee_proportional_millionths: 0x3e8`). `get_payment` KHÔNG trả route/hop count — chỉ có `fee` làm bằng chứng runtime có hop trung gian.
 
 ## Ghi chú lệch spec cần sửa
 - Glossary "Fiber RPC methods" ghi `get_node_info` / `close_channel` — thực tế node 0.8 là

@@ -59,6 +59,28 @@ async function openChannel(
   }
 }
 
+/**
+ * Chờ graph của node gửi biết 1 channel chạm tới target (gossip đã lan) trước khi send_payment —
+ * tránh "PathFind error: no path found" khi route multi-hop chưa propagate (BR-DET-001). Best-effort:
+ * hết timeout thì vẫn để send_payment chạy để lấy lỗi thật. Direct peer đã có sẵn trong graph → trả ngay.
+ */
+async function waitForRoute(
+  client: FiberClient,
+  from: string,
+  targetPubkey: string,
+  config: GlobalConfig,
+): Promise<void> {
+  const deadline = Date.now() + config.pollTimeoutMs;
+  const want = targetPubkey.toLowerCase();
+  while (Date.now() < deadline) {
+    const res = (await client.rawCall(from, "graph_channels", [{}])) as {
+      channels: { node1?: string; node2?: string }[];
+    };
+    if (res.channels.some((c) => c.node1?.toLowerCase() === want || c.node2?.toLowerCase() === want)) return;
+    await sleep(config.pollIntervalMs);
+  }
+}
+
 /** Poll get_payment tới khi Success/Failed (send_payment là async — status đầu là Created/Inflight). */
 async function waitPayment(
   client: FiberClient,
@@ -164,6 +186,7 @@ export async function runSeedSteps(
         const amount = `0x${ckbToShannon(step.amount!).toString(16)}`;
         const input = { from: step.from, to: step.to, amount: step.amount };
         try {
+          await waitForRoute(client, step.from!, pubkey[step.to!]!, config);
           // send_payment có thể lỗi đồng bộ (vd insufficient outbound) — record, KHÔNG throw.
           const res = (await client.rawCall(step.from!, "send_payment", [
             { target_pubkey: pubkey[step.to!]!, amount, keysend: true },
