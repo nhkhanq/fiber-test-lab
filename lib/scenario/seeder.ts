@@ -14,6 +14,13 @@ function ckbToShannon(ckb: number): bigint {
   return BigInt(ckb) * SHANNON_PER_CKB;
 }
 
+/** Target còn kết nối với node gửi không (list_peers). Dùng để phân biệt peer_offline vs insufficient_outbound. */
+async function isPeerConnected(client: FiberClient, node: string, peerPubkey: string): Promise<boolean> {
+  const res = (await client.rawCall(node, "list_peers")) as { peers: { pubkey?: string }[] };
+  const want = peerPubkey.toLowerCase();
+  return res.peers.some((p) => p.pubkey?.toLowerCase() === want);
+}
+
 /** Poll list_peers(node) tới khi peer đã connected (Init xong) — trước khi open_channel. */
 async function waitForPeer(
   client: FiberClient,
@@ -194,7 +201,11 @@ export async function runSeedSteps(
           const final = await waitPayment(client, step.from!, res.payment_hash, config);
           store.recordStep("send_payment", input, final);
         } catch (e) {
-          store.recordStep("send_payment", input, { error: e instanceof Error ? e.message : String(e) });
+          const message = e instanceof Error ? e.message : String(e);
+          // Lỗi "max outbound liquidity 0" khi peer offline TRÙNG với insufficient_outbound → ghi kèm
+          // trạng thái kết nối để phân loại đúng (E8-2). Lỗi truy vấn peer → coi như còn kết nối.
+          const peerConnected = await isPeerConnected(client, step.from!, pubkey[step.to!]!).catch(() => true);
+          store.recordStep("send_payment", input, { error: message, peerConnected });
         }
         break;
       }

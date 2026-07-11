@@ -131,10 +131,12 @@ Kịch bản: kênh alice→bob, alice tiêu được 301 CKB, trả invoice 400
 |---|---|---|
 | "Failed to build route" + "Insufficient balance" / "max outbound liquidity ... insufficient" | `insufficient_outbound` | E0-5 (invoice), E5-3 (keysend) ✅ |
 | "Failed to build route" + "PathFind error: no path found" | `no_route_found` | E5-2 ✅ |
+| (message TRÙNG insufficient_outbound) + **`list_peers` không còn target** | `peer_offline` | E8-2 ✅ |
 | (TODO) invoice expired | `invoice_expired` | expired-invoice (E8-1) |
-| (TODO) peer offline / connection | `peer_offline` | peer-offline (E8-2) |
 
-→ `mapError()` match theo substring của message (code luôn -32000). E5-3 xác nhận keysend cho CÙNG error như E0-5 invoice: `max outbound liquidity 40100000000 is insufficient, required amount: 45000000000` (401 CKB outbound < 450 CKB trả, kênh cap 500).
+→ `mapError()` match substring message (code luôn -32000). E5-3: keysend cho CÙNG error như E0-5 invoice: `max outbound liquidity 40100000000 is insufficient, required amount: 45000000000` (401 CKB outbound < 450 CKB).
+
+**E8-2 — peer offline không phân biệt được bằng message.** `docker kill bob` → `send_payment` alice→bob fail với `max outbound liquidity 0 is insufficient` — TRÙNG hệt insufficient_outbound (channel ready+enabled nhưng peer offline ⇒ liquidity dùng được = 0). Phân biệt bằng **`list_peers(alice)` = `[]`** (bob bị xoá khỏi peers NGAY khi send_payment fail, kịp cho seeder ghi `peerConnected:false`). ⇒ `classifyFailure()` ưu tiên peerConnected trước message.
 
 ## 9. Multi-hop routing (E5-2) — graph gossip + fee
 

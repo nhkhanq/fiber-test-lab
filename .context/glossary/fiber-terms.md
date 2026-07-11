@@ -64,12 +64,13 @@ Tập mã lỗi Test Lab dùng trong `expect.reason`. Danh sách:
 
 FNN luôn trả JSON-RPC `code: -32000` (generic) nên phải phân loại bằng **substring của `message`** — xem `lib/scenario/errorCategory.ts::mapError()` và `docs/hands-on/rpc-notebook.md` §8/§9. Mapping ĐÃ verify với node thật (FNN 0.8.0):
 
-| ErrorCategory | Substring trong message (raw) | Verify tại |
+| ErrorCategory | Tín hiệu phân loại | Verify tại |
 |---|---|---|
-| `insufficient_outbound` | `Insufficient balance` / `max outbound liquidity … is insufficient` | E0-5, E5-3 |
-| `no_route_found` | `PathFind error: no path found` | E5-2 |
+| `insufficient_outbound` | message: `Insufficient balance` / `max outbound liquidity … is insufficient` (peer VẪN kết nối) | E0-5, E5-3 |
+| `no_route_found` | message: `PathFind error: no path found` | E5-2 |
+| `peer_offline` | **`list_peers` không còn target** (peer offline cho lỗi message TRÙNG `insufficient_outbound` "max outbound liquidity 0" — phải phân biệt bằng kết nối, không bằng message) | E8-2 |
 
-Các loại còn lại (`peer_offline`, `invoice_expired`, `amount_out_of_range`, `asset_mismatch`, `channel_not_ready`, `reserve_violation`, `insufficient_inbound`) **chưa verify** — bổ sung khi scenario E8 gặp lỗi thật. Chốt chính thức vào `decisions-log.md` cần human confirm.
+Vì `peer_offline` trùng message với `insufficient_outbound`, phân loại đi qua `classifyFailure()`: ưu tiên `peerConnected === false` → `peer_offline`, còn lại mới `mapError()` theo message. Các loại còn lại (`invoice_expired`, `amount_out_of_range`, `asset_mismatch`, `channel_not_ready`, `reserve_violation`, `insufficient_inbound`) **chưa verify**. Chốt chính thức vào `decisions-log.md` cần human confirm.
 
 ---
 

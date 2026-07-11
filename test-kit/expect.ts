@@ -1,7 +1,7 @@
 import { loadConfig } from "../lib/config";
 import { MIN_CHANNEL_RESERVE_CKB, SHANNON_PER_CKB } from "../lib/constants";
 import { runLogPath } from "../lib/runlog/store";
-import { mapError } from "../lib/scenario/errorCategory";
+import { classifyFailure, mapError } from "../lib/scenario/errorCategory";
 import type { ErrorCategory } from "../lib/scenario/schema";
 import type { ScenarioContext } from "./context";
 
@@ -59,9 +59,9 @@ export async function expectPaymentFails(
 ): Promise<void> {
   if (!paymentId) {
     const last = [...ctx.store.data.steps].reverse().find((s) => s.action === "send_payment");
-    const error = (last?.result as { error?: unknown } | null)?.error;
-    if (error === undefined) await fail(ctx, `expectPaymentFails: không có payment nào (run ${ctx.runId})`);
-    await assertReason(ctx, String(error), reason);
+    const result = last?.result as { error?: unknown; peerConnected?: boolean } | null;
+    if (!result || result.error === undefined) await fail(ctx, `expectPaymentFails: không có payment nào (run ${ctx.runId})`);
+    await assertReason(ctx, classifyFailure(result), reason);
     return;
   }
 
@@ -69,14 +69,13 @@ export async function expectPaymentFails(
   if (final.status !== "Failed") {
     await fail(ctx, `expectPaymentFails: payment ${paymentId.slice(0, 12)}… status ${final.status} (mong Failed)`);
   }
-  await assertReason(ctx, String(final.failed_error ?? ""), reason);
+  await assertReason(ctx, mapError(String(final.failed_error ?? "")), reason);
 }
 
-async function assertReason(ctx: ScenarioContext, message: string, reason?: ErrorCategory): Promise<void> {
+async function assertReason(ctx: ScenarioContext, actual: ErrorCategory | null, reason?: ErrorCategory): Promise<void> {
   if (!reason) return;
-  const actual = mapError(message);
   if (actual !== reason) {
-    await fail(ctx, `expectPaymentFails: reason "${actual ?? "unknown"}" ≠ mong "${reason}" (raw: ${message.slice(0, 120)})`);
+    await fail(ctx, `expectPaymentFails: reason "${actual ?? "unknown"}" ≠ mong "${reason}"`);
   }
 }
 

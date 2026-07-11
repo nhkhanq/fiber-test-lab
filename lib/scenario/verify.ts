@@ -1,5 +1,5 @@
 import type { StepRecord } from "../runlog/store";
-import { mapError } from "./errorCategory";
+import { classifyFailure } from "./errorCategory";
 import type { Channel, ErrorCategory, Scenario } from "./schema";
 
 export interface RouteHopsResult {
@@ -56,12 +56,11 @@ function verifyRouteHops(scenario: Scenario, payments: StepRecord[], allSucceede
   return { expected, actual, match: actual === expected && feeConsistent };
 }
 
-/** reason: map lỗi thô của send_payment fail → ErrorCategory, so với expect.reason (chỉ khi status failed). */
+/** reason: phân loại lỗi send_payment fail → ErrorCategory, so với expect.reason (chỉ khi status failed). */
 function verifyReason(scenario: Scenario, payments: StepRecord[]): ReasonResult {
   const expected = scenario.expect.reason!;
   const failed = payments.find((p) => (p.result as { status?: string } | null)?.status !== "Success");
-  const message = String((failed?.result as { error?: unknown } | null)?.error ?? "");
-  const actual = mapError(message);
+  const actual = classifyFailure(failed?.result as { error?: unknown; peerConnected?: boolean } | null);
   return { expected, actual, match: actual === expected };
 }
 

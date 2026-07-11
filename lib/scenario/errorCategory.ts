@@ -14,3 +14,14 @@ export function mapError(message: string): ErrorCategory | null {
   for (const rule of RULES) if (rule.pattern.test(message)) return rule.category;
   return null;
 }
+
+/**
+ * Phân loại 1 send_payment fail đã ghi → ErrorCategory. Peer offline cho lỗi TRÙNG insufficient_outbound
+ * ("max outbound liquidity 0") nên phải ưu tiên tín hiệu `peerConnected` (E8-2) trước khi map theo message.
+ */
+export function classifyFailure(
+  result: { error?: unknown; peerConnected?: boolean } | null,
+): ErrorCategory | null {
+  if (result?.peerConnected === false) return "peer_offline";
+  return mapError(String(result?.error ?? ""));
+}

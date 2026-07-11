@@ -30,4 +30,17 @@ describe("test-kit examples", () => {
     },
     TIMEOUT_MS,
   );
+
+  it(
+    "peer-offline: payment fail với reason peer_offline",
+    async () => {
+      const ctx = await setupScenario("peer-offline");
+      try {
+        await expectPaymentFails(ctx, ctx.lastPaymentId, "peer_offline");
+      } finally {
+        await ctx.reset();
+      }
+    },
+    TIMEOUT_MS,
+  );
 });

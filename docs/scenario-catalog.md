@@ -52,6 +52,12 @@ Mọi payment dùng keysend (`target_pubkey` + `amount`, không cần invoice). 
 - **Expect:** `status: failed`, `reason: insufficient_outbound`.
 - **Kết quả thật:** send_payment lỗi **đồng bộ** (không sinh payment_hash): `Failed to build route, Insufficient balance: max outbound liquidity 40100000000 is insufficient, required amount: 45000000000` (401 < 450 CKB) → map `insufficient_outbound` (E5-3/E5-4).
 
+### `peer-offline` (stretch)
+- **Topology:** alice → bob (1 kênh, capacity 500 CKB).
+- **Seed:** `kill_node bob` → alice trả bob 100 CKB.
+- **Expect:** `status: failed`, `reason: peer_offline`.
+- **Kết quả thật:** send_payment lỗi `max outbound liquidity 0 is insufficient` — **TRÙNG message với `insufficient_outbound`** (peer offline ⇒ liquidity dùng được = 0). Phân biệt bằng `list_peers(alice) = []` (`peerConnected: false`) → `classifyFailure` cho `peer_offline` (E8-2).
+
 ## Exit codes (mọi lệnh CLI)
 
 `0` ok · `1` lỗi config/validation · `2` lỗi runtime (docker/RPC) · `3` expect không khớp.

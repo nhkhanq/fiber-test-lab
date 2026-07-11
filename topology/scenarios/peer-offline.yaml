@@ -1,0 +1,17 @@
+name: peer-offline
+description: Alice pays Bob but Bob is killed first, payment fails
+nodes: [alice, bob]
+channels:
+  - from: alice
+    to: bob
+    capacity: 500
+seed:
+  - action: kill_node
+    node: bob
+  - action: send_payment
+    from: alice
+    to: bob
+    amount: 100
+expect:
+  status: failed
+  reason: peer_offline
