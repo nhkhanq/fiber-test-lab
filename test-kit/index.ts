@@ -5,3 +5,4 @@ export {
   expectChannelState,
   type ChannelStateExpectation,
 } from "./expect";
+export { subscribePayments, type PaymentWatcher } from "../lib/fiber/subscribe";

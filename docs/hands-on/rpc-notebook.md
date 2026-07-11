@@ -148,6 +148,13 @@ Kịch bản: kênh alice→bob, alice tiêu được 301 CKB, trả invoice 400
 - `send_payment` multi-hop giống direct (keysend + target_pubkey) — FNN tự build route nếu graph có path.
 - **fee phân biệt hop:** kênh trực tiếp `fee: 0x0`; qua 1 hop trung gian (bob) `fee: 0x989680` = 10,000,000 shannon = 0.1 CKB (= 0.1% × 100 CKB, khớp `tlc_fee_proportional_millionths: 0x3e8`). `get_payment` KHÔNG trả route/hop count — chỉ có `fee` làm bằng chứng runtime có hop trung gian.
 
+## 10. Event-driven qua subscribe_store_changes (E8-3) — WS
+
+- **Method CÓ TỒN TẠI trong FNN 0.8.0** (không phải chỉ 0.8.1 như system-design đoán). Nhưng **chỉ chạy qua WebSocket** — gọi qua HTTP JSON-RPC trả `-32603 Internal error`. FNN dùng CHUNG port cho WS (`--fiber-reuse-port-for-websocket` default true) ⇒ `ws://127.0.0.1:<port>` = cùng endpoint RPC.
+- Subscribe: gửi `{method:"subscribe_store_changes", params:[]}` → trả `result` = subscription id (số).
+- Notification: `{method:"store_changes", params:{subscription, result:{<Tag>:{...}}}}`. `result` là union có tag: **`PutPaymentSession`** (`payment_hash` + `payment_session.status`), `PutPreimage`, ... 1 payment phát nhiều event khi đổi state.
+- `PutPaymentSession.payment_session.status` chuyển **`Created` → `Success`/`Failed`** (giống get_payment) ⇒ chờ event thay poll. **Phải subscribe TRƯỚC khi gửi payment** để không lỡ event. `lib/fiber/subscribe.ts::subscribePayments()` đệm event theo hash, `wait(hash)` resolve khi terminal; test-kit `ctx.watchPayments(node)`.
+
 ## Ghi chú lệch spec cần sửa
 - Glossary "Fiber RPC methods" ghi `get_node_info` / `close_channel` — thực tế node 0.8 là
   **`node_info`** và **`shutdown_channel`**. Nên sửa glossary khi rảnh (đã verify tay).

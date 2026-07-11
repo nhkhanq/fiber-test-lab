@@ -23,11 +23,13 @@
     "@ckb-ccc/core": "0.0.0-canary-20260330023358",
     "@ckb-ccc/fiber": "0.0.0-canary-20260330023358",
     "commander": "^12.1.0",
+    "ws": "^8.21.0",
     "yaml": "^2.9.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^20.19.0",
+    "@types/ws": "^8.18.1",
     "tsx": "^4.23.0",
     "typescript": "^5.9.3",
     "vitest": "^2.1.9"
