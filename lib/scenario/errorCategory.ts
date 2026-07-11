@@ -6,6 +6,7 @@ import type { ErrorCategory } from "./schema";
  * loại chưa gặp (E8) để dành. Thứ tự: cụ thể trước (cùng có "Failed to build route").
  */
 const RULES: { pattern: RegExp; category: ErrorCategory }[] = [
+  { pattern: /invoice is expired|invoice.*expired/i, category: "invoice_expired" },
   { pattern: /max outbound liquidity.*insufficient|Insufficient balance/i, category: "insufficient_outbound" },
   { pattern: /no path found|PathFind error/i, category: "no_route_found" },
 ];

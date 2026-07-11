@@ -69,8 +69,9 @@ FNN luôn trả JSON-RPC `code: -32000` (generic) nên phải phân loại bằn
 | `insufficient_outbound` | message: `Insufficient balance` / `max outbound liquidity … is insufficient` (peer VẪN kết nối) | E0-5, E5-3 |
 | `no_route_found` | message: `PathFind error: no path found` | E5-2 |
 | `peer_offline` | **`list_peers` không còn target** (peer offline cho lỗi message TRÙNG `insufficient_outbound` "max outbound liquidity 0" — phải phân biệt bằng kết nối, không bằng message) | E8-2 |
+| `invoice_expired` | message: `invoice is expired` (`InvalidParameter: Failed to validate payment request`) | E8-1 |
 
-Vì `peer_offline` trùng message với `insufficient_outbound`, phân loại đi qua `classifyFailure()`: ưu tiên `peerConnected === false` → `peer_offline`, còn lại mới `mapError()` theo message. Các loại còn lại (`invoice_expired`, `amount_out_of_range`, `asset_mismatch`, `channel_not_ready`, `reserve_violation`, `insufficient_inbound`) **chưa verify**. Chốt chính thức vào `decisions-log.md` cần human confirm.
+Vì `peer_offline` trùng message với `insufficient_outbound`, phân loại đi qua `classifyFailure()`: ưu tiên `peerConnected === false` → `peer_offline`, còn lại mới `mapError()` theo message. Các loại còn lại (`amount_out_of_range`, `asset_mismatch`, `channel_not_ready`, `reserve_violation`, `insufficient_inbound`) **chưa verify**. Chốt chính thức vào `decisions-log.md` cần human confirm.
 
 ---
 

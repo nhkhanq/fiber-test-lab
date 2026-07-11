@@ -58,6 +58,12 @@ Mọi payment dùng keysend (`target_pubkey` + `amount`, không cần invoice). 
 - **Expect:** `status: failed`, `reason: peer_offline`.
 - **Kết quả thật:** send_payment lỗi `max outbound liquidity 0 is insufficient` — **TRÙNG message với `insufficient_outbound`** (peer offline ⇒ liquidity dùng được = 0). Phân biệt bằng `list_peers(alice) = []` (`peerConnected: false`) → `classifyFailure` cho `peer_offline` (E8-2).
 
+### `expired-invoice` (stretch)
+- **Topology:** alice → bob (1 kênh, capacity 500 CKB).
+- **Seed:** `new_invoice(bob, 100 CKB, expiresInSec: 3)` → `wait 6s` → alice trả invoice đó (`send_payment` `useInvoice: true`).
+- **Expect:** `status: failed`, `reason: invoice_expired`.
+- **Kết quả thật:** send_payment lỗi **đồng bộ**: `InvalidParameter: Failed to validate payment request: "invoice is expired"` → map `invoice_expired` (E8-1). Trả invoice dùng `send_payment [{ invoice }]`, không keysend.
+
 ## Exit codes (mọi lệnh CLI)
 
 `0` ok · `1` lỗi config/validation · `2` lỗi runtime (docker/RPC) · `3` expect không khớp.

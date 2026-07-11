@@ -1,0 +1,22 @@
+name: expired-invoice
+description: Alice pays Bob's invoice after it has expired, payment fails
+nodes: [alice, bob]
+channels:
+  - from: alice
+    to: bob
+    capacity: 500
+seed:
+  - action: new_invoice
+    to: bob
+    amount: 100
+    expiresInSec: 3
+  - action: wait
+    durationSec: 6
+  - action: send_payment
+    from: alice
+    to: bob
+    amount: 100
+    useInvoice: true
+expect:
+  status: failed
+  reason: invoice_expired

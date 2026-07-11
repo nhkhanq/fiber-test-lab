@@ -43,4 +43,17 @@ describe("test-kit examples", () => {
     },
     TIMEOUT_MS,
   );
+
+  it(
+    "expired-invoice: payment fail với reason invoice_expired",
+    async () => {
+      const ctx = await setupScenario("expired-invoice");
+      try {
+        await expectPaymentFails(ctx, ctx.lastPaymentId, "invoice_expired");
+      } finally {
+        await ctx.reset();
+      }
+    },
+    TIMEOUT_MS,
+  );
 });

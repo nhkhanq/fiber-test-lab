@@ -186,18 +186,24 @@ export async function runSeedSteps(
 ): Promise<void> {
   const nodes = resolved ?? (await resolveNodes(scenario, client));
   const pubkey = Object.fromEntries(Object.entries(nodes).map(([n, r]) => [n, r.pubkey]));
+  const invoices: Record<string, string> = {}; // invoice_address theo node nhận (new_invoice → send_payment useInvoice)
 
   for (const step of scenario.seed) {
     switch (step.action) {
       case "send_payment": {
-        const amount = `0x${ckbToShannon(step.amount!).toString(16)}`;
         const input = { from: step.from, to: step.to, amount: step.amount };
         try {
-          await waitForRoute(client, step.from!, pubkey[step.to!]!, config);
-          // send_payment có thể lỗi đồng bộ (vd insufficient outbound) — record, KHÔNG throw.
-          const res = (await client.rawCall(step.from!, "send_payment", [
-            { target_pubkey: pubkey[step.to!]!, amount, keysend: true },
-          ])) as { payment_hash: string };
+          let paymentParams: Record<string, unknown>;
+          if (step.useInvoice) {
+            const invoice = invoices[step.to!];
+            if (!invoice) throw new Error(`send_payment useInvoice: chưa có invoice cho "${step.to}"`);
+            paymentParams = { invoice };
+          } else {
+            await waitForRoute(client, step.from!, pubkey[step.to!]!, config);
+            paymentParams = { target_pubkey: pubkey[step.to!]!, amount: `0x${ckbToShannon(step.amount!).toString(16)}`, keysend: true };
+          }
+          // send_payment có thể lỗi đồng bộ (insufficient outbound / invoice expired) — record, KHÔNG throw.
+          const res = (await client.rawCall(step.from!, "send_payment", [paymentParams])) as { payment_hash: string };
           const final = await waitPayment(client, step.from!, res.payment_hash, config);
           store.recordStep("send_payment", input, final);
         } catch (e) {
@@ -210,12 +216,15 @@ export async function runSeedSteps(
         break;
       }
       case "new_invoice": {
-        const res = await client.newInvoice(step.to!, {
-          amount: ckbToShannon(step.amount!),
+        const params: Record<string, unknown> = {
+          amount: `0x${ckbToShannon(step.amount!).toString(16)}`,
           currency: "Fibd",
-          paymentPreimage: `0x${randomBytes(32).toString("hex")}`,
-          expiry: step.expiresInSec,
-        });
+          payment_preimage: `0x${randomBytes(32).toString("hex")}`,
+          description: `${scenario.name}:${step.to}`,
+        };
+        if (step.expiresInSec !== undefined) params.expiry = `0x${step.expiresInSec.toString(16)}`;
+        const res = (await client.rawCall(step.to!, "new_invoice", [params])) as { invoice_address: string };
+        invoices[step.to!] = res.invoice_address;
         store.recordStep("new_invoice", { to: step.to, amount: step.amount }, res);
         break;
       }
