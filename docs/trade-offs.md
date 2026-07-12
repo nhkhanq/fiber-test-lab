@@ -28,6 +28,12 @@ Fiber Test Lab đánh đổi có chủ đích để đạt mục tiêu chính: *
 
 - Mỗi scenario dựng cụm docker riêng (~30–60s boot + channel ready). Test suite chạy **tuần tự** (không song song) để không tranh tài nguyên → tất định nhưng chậm (`npm test` ~9 phút). Trong lúc dev nên chạy từng file.
 
+## UDT (RUSD) là sUDT devnet, mint runtime
+
+- Asset `RUSD` ánh xạ sang script `simple_udt` deploy sẵn trong genesis; **token thì mint lúc chạy** (genesis chỉ cấp CKB) bằng 1 tx CCC do node tự ký (owner mode). Không phải RUSD "thật" trên mainnet — chỉ đủ để test kênh/thanh toán UDT.
+- code_hash + cell_dep của `simple_udt`/secp256k1 là **hằng số derive từ genesis** (pin theo dev.toml + CKB v0.207.0). Đổi genesis phải derive lại (hash binary + quét block 0).
+- CKB RPC mở port map tạm để mint (đóng khi reset). `fiber-lab seed` chạy-lại-riêng chưa hỗ trợ UDT (mint gắn với `up`).
+
 ## Bảo trì version
 
 - FNN và `@ckb-ccc` đang ở bản canary/pre-release, API còn lệch nhau (một số RPC phải gọi `rawCall` thay vì SDK typed). Khi nâng version phải: chạy lại toàn bộ scenario, cập nhật `scenario-catalog.md`, và kiểm lại mapping lỗi.

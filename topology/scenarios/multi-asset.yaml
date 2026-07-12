@@ -1,0 +1,16 @@
+name: multi-asset
+description: Alice pays Bob in RUSD (sUDT) over a UDT channel
+nodes: [alice, bob]
+channels:
+  - from: alice
+    to: bob
+    capacity: 10000
+    asset: RUSD
+seed:
+  - action: send_payment
+    from: alice
+    to: bob
+    amount: 100
+    asset: RUSD
+expect:
+  status: succeeded

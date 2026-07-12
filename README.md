@@ -47,6 +47,7 @@ Bundled scenarios (see [`docs/scenario-catalog.md`](docs/scenario-catalog.md) fo
 - **`direct-channel`** — alice pays bob over one channel (fee 0, deterministic over 3 runs).
 - **`two-hop-route`** — alice pays charlie routed through bob (`routeHops: 1`, non-zero routing fee).
 - **`insufficient-capacity`** — payment exceeds outbound → fails with `reason: insufficient_outbound`.
+- **`multi-asset`** — Alice pays Bob in RUSD (sUDT) over a UDT channel (seeder mints the token, opens a UDT channel, pays).
 
 A scenario is a YAML file in `topology/scenarios/`:
 

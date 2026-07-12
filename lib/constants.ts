@@ -47,6 +47,20 @@ export const FNN_SECRET_KEY_PASSWORD = "flab-dev";
 export const FNN_GOSSIP_NETWORK_INTERVAL_MS = 2000;
 export const FNN_GOSSIP_STORE_INTERVAL_MS = 2000;
 
+// UDT (E8-4): scenario asset "RUSD" ánh xạ sang script simple_udt của devnet reimplement.
+// Giá trị TẤT ĐỊNH theo dev.toml + CKB v0.207.0 đã pin — derive lại (hash binary + quét genesis) nếu đổi genesis.
+// code_hash = ckb-blake2b của binary simple_udt; cell_dep + secp256k1 dep_group lấy từ genesis block 0.
+export const SIMPLE_UDT_CODE_HASH = "0xe1e354d6d643ad42724d40967e334984534e0367405c5ae42a9d7d63d77df419";
+export const SIMPLE_UDT_DEP = {
+  txHash: "0xd2beb4f3ff33abce80bdfac6df1afbc087f6b702eb4cd7cdda9272dfcde72834",
+  index: 8,
+} as const;
+export const SECP256K1_DEP_GROUP = {
+  txHash: "0x0a60a87b186f3a6f34545c3eebf0318ecd2cadc9db60b597fa93dfb594641d07",
+  index: 0,
+} as const;
+export const UDT_ASSET = "RUSD" as const; // tên asset trong scenario ↔ simple_udt
+
 // Privkey pre-fund sẵn trong genesis (dev.toml issued_cells) — gán theo node index. CHỈ devnet, không bí mật.
 // Mỗi node có 10 tỷ CKB từ genesis ⇒ mở channel ngay, không cần faucet runtime.
 export const DEV_FUNDED_KEYS = [

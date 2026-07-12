@@ -155,6 +155,13 @@ Kịch bản: kênh alice→bob, alice tiêu được 301 CKB, trả invoice 400
 - Notification: `{method:"store_changes", params:{subscription, result:{<Tag>:{...}}}}`. `result` là union có tag: **`PutPaymentSession`** (`payment_hash` + `payment_session.status`), `PutPreimage`, ... 1 payment phát nhiều event khi đổi state.
 - `PutPaymentSession.payment_session.status` chuyển **`Created` → `Success`/`Failed`** (giống get_payment) ⇒ chờ event thay poll. **Phải subscribe TRƯỚC khi gửi payment** để không lỡ event. `lib/fiber/subscribe.ts::subscribePayments()` đệm event theo hash, `wait(hash)` resolve khi terminal; test-kit `ctx.watchPayments(node)`.
 
+## 11. Multi-asset UDT (E8-4) — sUDT/RUSD
+
+- **Script simple_udt** trên devnet reimplement: code_hash = ckb-blake2b của binary `/fiber-scripts/simple_udt` = `0xe1e354d6d643ad42724d40967e334984534e0367405c5ae42a9d7d63d77df419` (hash_type **data**) — TRÙNG demo-startup ⇒ cùng nguồn script. cell_dep = genesis tx[0] out[8]; secp256k1 dep_group = genesis tx[1] out[0]. Tất định theo dev.toml + CKB v0.207.0.
+- **Không có UDT trong genesis** (`issued_cells` chỉ CKB) ⇒ phải **mint runtime**. `mintUdt` (CCC): output cell `{lock: node, type: simple_udt{args: ownerLockHash}, data: amount u128 LE}`; owner mode = lock owner có mặt trong inputs (node tự ký). Cần override secp256k1 dep_group của client CCC (mặc định testnet — sai), gửi `passthrough` (simple_udt không phải well-known script).
+- **FNN nhận UDT** qua `ckb.udt_whitelist: [{name, script:{code_hash,hash_type:data,args:"0x.*"}, cell_deps, auto_accept_amount}]` (args regex khớp mọi owner).
+- **open_channel UDT:** thêm `funding_udt_type_script` = script sUDT; `funding_amount` = **đơn vị token** (hex, KHÔNG ×1e8). `list_channels` → `local_balance` cũng là đơn vị token. **send_payment UDT:** thêm `udt_type_script`; `amount` = đơn vị token. Verify: kênh 10000 RUSD, trả 100 → Success, fee 0.
+
 ## Ghi chú lệch spec cần sửa
 - Glossary "Fiber RPC methods" ghi `get_node_info` / `close_channel` — thực tế node 0.8 là
   **`node_info`** và **`shutdown_channel`**. Nên sửa glossary khi rảnh (đã verify tay).

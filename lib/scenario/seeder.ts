@@ -1,17 +1,24 @@
 import { randomBytes } from "node:crypto";
 import type { GlobalConfig } from "../config";
 import type { FiberClient } from "../fiber/client";
-import { SHANNON_PER_CKB } from "../constants";
+import { DEV_FUNDED_KEYS, SHANNON_PER_CKB, UDT_ASSET } from "../constants";
 import { killNode, startNode } from "../docker/orchestrator";
+import { mintUdt, type UdtScript } from "../fiber/udt";
 import type { RunLogStore } from "../runlog/store";
 import { containerName } from "../../topology/compose.template";
-import type { Scenario } from "./schema";
+import type { Asset, Scenario } from "./schema";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** CKB → shannon (BigInt, hợp NumLike của ccc). */
 function ckbToShannon(ckb: number): bigint {
   return BigInt(ckb) * SHANNON_PER_CKB;
+}
+
+/** Số tiền hex theo asset: CKB → shannon (×1e8); UDT (RUSD) → đơn vị token thô. */
+function amountHex(value: number, asset: Asset): string {
+  const raw = asset === UDT_ASSET ? BigInt(value) : ckbToShannon(value);
+  return `0x${raw.toString(16)}`;
 }
 
 /** Target còn kết nối với node gửi không (list_peers). Dùng để phân biệt peer_offline vs insufficient_outbound. */
@@ -40,20 +47,23 @@ async function waitForPeer(
 
 /**
  * open_channel (raw RPC, field `pubkey` cho FNN 0.8) + retry lỗi handshake transient
- * ("waiting for peer to send Init"). funding_amount = hex shannon.
+ * ("waiting for peer to send Init"). funding_amount hex theo asset; kênh UDT kèm funding_udt_type_script.
  */
 async function openChannel(
   client: FiberClient,
   from: string,
   peerPubkey: string,
-  capacityCkb: number,
+  capacity: number,
+  asset: Asset,
+  udt: UdtScript | undefined,
   config: GlobalConfig,
 ): Promise<void> {
-  const fundingAmount = `0x${ckbToShannon(capacityCkb).toString(16)}`;
+  const params: Record<string, unknown> = { pubkey: peerPubkey, funding_amount: amountHex(capacity, asset) };
+  if (udt) params.funding_udt_type_script = udt;
   const deadline = Date.now() + config.pollTimeoutMs;
   while (true) {
     try {
-      await client.rawCall(from, "open_channel", [{ pubkey: peerPubkey, funding_amount: fundingAmount }]);
+      await client.rawCall(from, "open_channel", [params]);
       return;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -158,18 +168,40 @@ export async function runSeed(
   store: RunLogStore,
   config: GlobalConfig,
   runId: string,
+  ckbEndpoint: string | null,
 ): Promise<void> {
   const nodes = await resolveNodes(scenario, client);
+  const udtByNode: Record<string, UdtScript> = {}; // script sUDT mà node đó nắm giữ (đã mint) — E8-4
 
   for (const ch of scenario.channels) {
+    let udt: UdtScript | undefined;
+    if (ch.asset === UDT_ASSET) {
+      udt = udtByNode[ch.from] ?? (await mintForNode(scenario, ch.from, ch.capacity, ckbEndpoint, store));
+      udtByNode[ch.from] = udt;
+    }
     await client.connectPeer(ch.from, { address: nodes[ch.to]!.address });
     await waitForPeer(client, ch.from, nodes[ch.to]!.pubkey, config);
-    await openChannel(client, ch.from, nodes[ch.to]!.pubkey, ch.capacity, config);
+    await openChannel(client, ch.from, nodes[ch.to]!.pubkey, ch.capacity, ch.asset, udt, config);
     await waitChannelReady(client, ch.from, nodes[ch.to]!.pubkey, config);
-    store.recordStep("open_channel", { from: ch.from, to: ch.to, capacity: ch.capacity }, { ready: true });
+    store.recordStep("open_channel", { from: ch.from, to: ch.to, capacity: ch.capacity, asset: ch.asset }, { ready: true });
   }
 
-  await runSeedSteps(scenario, client, store, config, runId, nodes);
+  await runSeedSteps(scenario, client, store, config, runId, nodes, udtByNode);
+}
+
+/** Mint sUDT cho `node` (owner = key CKB genesis của node) — funding kênh UDT cần dư token. */
+async function mintForNode(
+  scenario: Scenario,
+  node: string,
+  capacity: number,
+  ckbEndpoint: string | null,
+  store: RunLogStore,
+): Promise<UdtScript> {
+  if (!ckbEndpoint) throw new Error("Scenario dùng UDT nhưng thiếu ckbEndpoint (CKB chưa map port).");
+  const key = DEV_FUNDED_KEYS[scenario.nodes.indexOf(node)]!;
+  const udt = await mintUdt(ckbEndpoint, key, BigInt(capacity) * 100n); // mint dư (×100) so với funding
+  store.recordStep("mint_udt", { node, amount: capacity * 100, asset: UDT_ASSET }, udt);
+  return udt;
 }
 
 /**
@@ -183,6 +215,7 @@ export async function runSeedSteps(
   config: GlobalConfig,
   runId: string,
   resolved?: Record<string, ResolvedNode>,
+  udtByNode: Record<string, UdtScript> = {},
 ): Promise<void> {
   const nodes = resolved ?? (await resolveNodes(scenario, client));
   const pubkey = Object.fromEntries(Object.entries(nodes).map(([n, r]) => [n, r.pubkey]));
@@ -191,7 +224,8 @@ export async function runSeedSteps(
   for (const step of scenario.seed) {
     switch (step.action) {
       case "send_payment": {
-        const input = { from: step.from, to: step.to, amount: step.amount };
+        const asset: Asset = step.asset ?? "CKB";
+        const input = { from: step.from, to: step.to, amount: step.amount, asset };
         try {
           let paymentParams: Record<string, unknown>;
           if (step.useInvoice) {
@@ -200,7 +234,8 @@ export async function runSeedSteps(
             paymentParams = { invoice };
           } else {
             await waitForRoute(client, step.from!, pubkey[step.to!]!, config);
-            paymentParams = { target_pubkey: pubkey[step.to!]!, amount: `0x${ckbToShannon(step.amount!).toString(16)}`, keysend: true };
+            paymentParams = { target_pubkey: pubkey[step.to!]!, amount: amountHex(step.amount!, asset), keysend: true };
+            if (asset === UDT_ASSET) paymentParams.udt_type_script = udtByNode[step.from!];
           }
           // send_payment có thể lỗi đồng bộ (insufficient outbound / invoice expired) — record, KHÔNG throw.
           const res = (await client.rawCall(step.from!, "send_payment", [paymentParams])) as { payment_hash: string };

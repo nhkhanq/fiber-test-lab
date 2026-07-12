@@ -10,6 +10,9 @@ import {
   DEV_FUNDED_KEYS,
   FNN_P2P_PORT,
   FNN_RPC_PORT,
+  SIMPLE_UDT_CODE_HASH,
+  SIMPLE_UDT_DEP,
+  UDT_ASSET,
 } from "../constants";
 import type { Scenario } from "../scenario/schema";
 
@@ -36,7 +39,25 @@ function nodeConfigYaml(node: string): string {
       listening_addr: `0.0.0.0:${FNN_RPC_PORT}`,
       enabled_modules: ["channel", "payment", "graph", "info", "invoice", "peer", "pubsub", "dev"],
     },
-    ckb: { rpc_url: `http://${CKB_SERVICE}:${CKB_RPC_PORT}` },
+    ckb: {
+      rpc_url: `http://${CKB_SERVICE}:${CKB_RPC_PORT}`,
+      // Nhận diện sUDT (asset RUSD) — args "0x.*" khớp mọi owner (E8-4). code_hash/cell_dep tất định theo genesis.
+      udt_whitelist: [
+        {
+          name: UDT_ASSET,
+          script: { code_hash: SIMPLE_UDT_CODE_HASH, hash_type: "data", args: "0x.*" },
+          cell_deps: [
+            {
+              cell_dep: {
+                out_point: { tx_hash: SIMPLE_UDT_DEP.txHash, index: `0x${SIMPLE_UDT_DEP.index.toString(16)}` },
+                dep_type: "code",
+              },
+            },
+          ],
+          auto_accept_amount: 1,
+        },
+      ],
+    },
     services: ["fiber", "rpc", "ckb"],
   });
 }

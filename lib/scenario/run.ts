@@ -40,7 +40,7 @@ export async function runScenario(
 
   if (scenario.channels.length > 0 || scenario.seed.length > 0) {
     try {
-      await runSeed(scenario, client, store, config, up.runId);
+      await runSeed(scenario, client, store, config, up.runId, up.ckbEndpoint);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       store.finish("failed", message);

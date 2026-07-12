@@ -118,6 +118,8 @@ export function buildComposeProject(
       build: { context: DOCKER_BUILD_CONTEXT, dockerfile: CKB_DOCKERFILE },
       networks: [net],
       restart: "unless-stopped",
+      // Port map tạm trên localhost (ephemeral) cho seeder mint UDT qua CCC (BR-ISO-002) — đóng khi teardown.
+      ports: [`127.0.0.1::${CKB_RPC_PORT}`],
       healthcheck: ckbHealthcheck(),
     },
   };

@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { access, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { GlobalConfig } from "../config";
-import { CKB_SERVICE, FNN_RPC_PORT, WORK_DIR } from "../constants";
+import { CKB_RPC_PORT, CKB_SERVICE, FNN_RPC_PORT, WORK_DIR } from "../constants";
 import { generateNodeConfigs } from "../fiber/nodeConfig";
 import { RunLogStore, type NodeRecord } from "../runlog/store";
 import type { Scenario } from "../scenario/schema";
@@ -168,11 +168,11 @@ export function printKeepGuidance(runId: string): void {
   console.error(`Giữ lại run ${runId} để debug — xem \`fiber-lab logs ${runId}\` hoặc dọn bằng \`fiber-lab reset ${runId}\`.`);
 }
 
-/** Host endpoint (port map tạm) của FNN RPC 1 node, hoặc null nếu chưa map. */
-async function nodeEndpoint(container: string): Promise<string | null> {
-  const r = await docker(["port", container, String(FNN_RPC_PORT)]);
-  const port = r.stdout.trim().split("\n")[0]?.match(/:(\d+)$/)?.[1];
-  return port ? `http://127.0.0.1:${port}` : null;
+/** Host endpoint (port map tạm) của 1 container theo cổng nội bộ, hoặc null nếu chưa map. */
+async function hostEndpoint(container: string, port: number): Promise<string | null> {
+  const r = await docker(["port", container, String(port)]);
+  const hostPort = r.stdout.trim().split("\n")[0]?.match(/:(\d+)$/)?.[1];
+  return hostPort ? `http://127.0.0.1:${hostPort}` : null;
 }
 
 export interface UpResult {
@@ -181,6 +181,8 @@ export interface UpResult {
   network: string;
   nodes: string[];
   endpoints: Record<string, string>;
+  /** Host endpoint tạm của CKB RPC — cho seeder mint UDT qua CCC. */
+  ckbEndpoint: string | null;
   composeFile: string;
 }
 
@@ -243,13 +245,14 @@ export async function up(
   // Resolve host port map cho từng node FNN → endpoints cho seeder/test-kit.
   const endpoints: Record<string, string> = {};
   for (const node of scenario.nodes) {
-    const ep = await nodeEndpoint(containerName(config, runId, node));
+    const ep = await hostEndpoint(containerName(config, runId, node), FNN_RPC_PORT);
     if (ep) {
       endpoints[node] = ep;
       const rec = store.data.nodes.find((n) => n.name === node);
       if (rec) rec.endpoint = ep;
     }
   }
+  const ckbEndpoint = await hostEndpoint(containerName(config, runId, CKB_SERVICE), CKB_RPC_PORT);
 
   // Không finish("completed") ở đây — topology đã READY nhưng seed (nếu có) chưa chạy;
   // caller (CLI `up`) quyết định khi nào run thực sự xong.
@@ -261,6 +264,7 @@ export async function up(
     network,
     nodes: scenario.nodes.filter((n) => n !== CKB_SERVICE),
     endpoints,
+    ckbEndpoint,
     composeFile,
   };
 }

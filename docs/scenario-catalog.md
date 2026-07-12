@@ -64,6 +64,12 @@ Mọi payment dùng keysend (`target_pubkey` + `amount`, không cần invoice). 
 - **Expect:** `status: failed`, `reason: invoice_expired`.
 - **Kết quả thật:** send_payment lỗi **đồng bộ**: `InvalidParameter: Failed to validate payment request: "invoice is expired"` → map `invoice_expired` (E8-1). Trả invoice dùng `send_payment [{ invoice }]`, không keysend.
 
+### `multi-asset` (stretch)
+- **Topology:** alice → bob (1 kênh **UDT/RUSD**, capacity 10000 đơn vị token).
+- **Seed:** alice trả bob 100 RUSD (sUDT).
+- **Expect:** `status: succeeded`.
+- **Kết quả thật:** seeder tự **mint sUDT** cho alice (owner = lock hash key genesis) qua @ckb-ccc → mở kênh với `funding_udt_type_script` → `send_payment` kèm `udt_type_script` (đơn vị token, KHÔNG ×1e8) → **Success** (E8-4). `RUSD` ↔ script `simple_udt` code_hash `0xe1e354…` (hash_type data), FNN nhận diện qua `ckb.udt_whitelist`.
+
 ## Exit codes (mọi lệnh CLI)
 
 `0` ok · `1` lỗi config/validation · `2` lỗi runtime (docker/RPC) · `3` expect không khớp.
