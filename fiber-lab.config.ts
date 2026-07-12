@@ -2,7 +2,6 @@ import type { GlobalConfig } from "./lib/config";
 
 const config: GlobalConfig = {
   pollIntervalMs: 1000,
-  // ChannelReady on the CKB devnet usually takes ~36-40s to confirm — a 30s timeout gave frequent false timeouts.
   pollTimeoutMs: 60_000,
   dockerNetworkPrefix: "flab",
   fnnVersion: "0.8.0", 

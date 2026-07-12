@@ -13,14 +13,10 @@ export interface ScenarioContext {
   scenario: Scenario;
   expectation: ExpectationResult | null;
   store: RunLogStore;
-  /** Host RPC endpoint per node (also the WS endpoint — FNN shares the port) for event-driven waits. */
   endpoints: Record<string, string>;
-  /** payment_hash of the last send_payment, or null if the payment failed synchronously (no hash). */
   lastPaymentId: string | null;
-  /** The node that sent the last payment — so get_payment is polled on the right node. */
   lastPaymentFrom: string | null;
   call(node: string, method: string, params?: unknown[]): Promise<unknown>;
-  /** Open an event-driven watcher (subscribe_store_changes) on a node — wait on events instead of polling. */
   watchPayments(node: string): Promise<PaymentWatcher>;
   reset(): Promise<void>;
 }
@@ -29,10 +25,6 @@ function lastSendPayment(store: RunLogStore): StepRecord | undefined {
   return [...store.data.steps].reverse().find((s) => s.action === "send_payment");
 }
 
-/**
- * up + seed a scenario and return a context for the test-kit to assert on (no teardown — call `ctx.reset()` when done).
- * Shares `runScenario` with `fiber-lab up`, so every RPC is still logged to the run-log.
- */
 export async function setupScenario(
   name: string,
   options: { keep?: boolean } = {},

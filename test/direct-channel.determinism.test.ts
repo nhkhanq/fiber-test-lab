@@ -8,7 +8,6 @@ const SCENARIO = "direct-channel";
 const RUNS = 3;
 const PER_RUN_TIMEOUT_MS = 240_000;
 
-// Normalize to the deterministic parts (drop run-id/timestamp/hash/port) to compare 3 runs — BR-DET-001.
 function outcome(store: RunLogStore): unknown {
   return store.data.steps.map((s) => {
     if (s.action === "send_payment") {

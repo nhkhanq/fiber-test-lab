@@ -17,7 +17,6 @@ RUN curl -fsSL -o /tmp/fnn.tar.gz \
 ARG FIBER_TAG=v0.8.0
 ARG FIBER_CONTRACTS_URL=https://raw.githubusercontent.com/nervosnetwork/fiber/${FIBER_TAG}/tests/deploy/contracts
 
-# fiber-scripts + chain spec: FNN cần để load dev.toml (chain spec trỏ /fiber-scripts/*).
 RUN mkdir -p /fiber-scripts \
     && for c in auth funding-lock commitment-lock simple_udt xudt_rce; do \
          curl -fsSL --retry 8 --retry-delay 5 \

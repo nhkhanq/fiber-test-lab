@@ -1,8 +1,3 @@
-#!/usr/bin/env bash
-# CKB devnet genesis khớp fiber devnet chuẩn (mô hình theo tests/nodes/deployer/dev.toml, tự viết).
-# fiber cells create_type_id=false ⇒ FNN devnet đọc scripts theo data-hash từ chain spec (config FNN
-# devnet không có scripts section, chỉ `fiber.chain: dev.toml`). message="ckb_dev" ⇒ genesis deterministic.
-# Account faucet nạp sẵn 20 tỷ CKB (privkey d00c06bfd800d27397002dca6fb0993d5ba6399b4238b2f29ee9deb97593d2bc).
 set -euo pipefail
 
 DATA_DIR="${CKB_DATA_DIR:-/var/lib/ckb}"
