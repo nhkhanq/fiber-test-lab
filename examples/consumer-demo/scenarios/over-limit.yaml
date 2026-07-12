@@ -1,0 +1,15 @@
+name: over-limit
+description: A payment above the customer's outbound must fail cleanly
+nodes: [customer, merchant]
+channels:
+  - from: customer
+    to: merchant
+    capacity: 500
+seed:
+  - action: send_payment
+    from: customer
+    to: merchant
+    amount: 480
+expect:
+  status: failed
+  reason: insufficient_outbound

@@ -4,7 +4,7 @@ import { EXIT_CODES } from "../../lib/constants";
 import { CliError } from "../../lib/errors";
 import { FiberClient } from "../../lib/fiber/client";
 import { RunLogStore, latestRunForScenario, type RunLog } from "../../lib/runlog/store";
-import { loadScenarioByName } from "../../lib/scenario/loader";
+import { loadScenario } from "../../lib/scenario/loader";
 import { runSeedSteps } from "../../lib/scenario/seeder";
 
 function endpointsOf(log: RunLog): Record<string, string> {
@@ -23,7 +23,7 @@ export function registerSeedCommand(program: Command): void {
       const config = loadConfig();
 
       // A bad schema throws ScenarioValidationError, which bubbles up to exit 1.
-      const scenario = await loadScenarioByName(scenarioName);
+      const scenario = await loadScenario(scenarioName);
 
       const log = opts.run
         ? await RunLogStore.load(opts.run).catch(() => null)

@@ -1,5 +1,5 @@
 import { readdir, readFile } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { SCENARIOS_DIR } from "../constants";
 import { ScenarioSchema, type Scenario } from "./schema";
@@ -72,6 +72,11 @@ export async function loadScenarioFile(filePath: string): Promise<Scenario> {
 
 export function loadScenarioByName(name: string): Promise<Scenario> {
   return loadScenarioFile(scenarioPath(name));
+}
+
+export function loadScenario(nameOrPath: string): Promise<Scenario> {
+  const isPath = /\.ya?ml$/i.test(nameOrPath) || nameOrPath.includes("/") || nameOrPath.includes("\\");
+  return loadScenarioFile(isPath ? resolve(nameOrPath) : scenarioPath(nameOrPath));
 }
 
 export interface ScenarioSummary {
