@@ -244,8 +244,10 @@ export async function runSeedSteps(
         } catch (e) {
           const message = e instanceof Error ? e.message : String(e);
           // Lỗi "max outbound liquidity 0" khi peer offline TRÙNG với insufficient_outbound → ghi kèm
-          // trạng thái kết nối để phân loại đúng (E8-2). Lỗi truy vấn peer → coi như còn kết nối.
-          const peerConnected = await isPeerConnected(client, step.from!, pubkey[step.to!]!).catch(() => true);
+          // trạng thái kết nối để phân loại đúng (E8-2). Kiểm HOP ĐẦU (peer của kênh sender cấp vốn),
+          // KHÔNG phải target cuối — multi-hop thì target không phải peer trực tiếp. Lỗi truy vấn → coi như còn kết nối.
+          const firstHop = scenario.channels.find((c) => c.from === step.from)?.to ?? step.to!;
+          const peerConnected = await isPeerConnected(client, step.from!, pubkey[firstHop]!).catch(() => true);
           store.recordStep("send_payment", input, { error: message, peerConnected });
         }
         break;

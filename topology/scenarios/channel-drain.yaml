@@ -1,0 +1,31 @@
+name: channel-drain
+description: Repeated payments drain Alice's outbound until one fails with insufficient_outbound
+nodes: [alice, bob]
+channels:
+  - from: alice
+    to: bob
+    capacity: 500
+seed:
+  - action: send_payment
+    from: alice
+    to: bob
+    amount: 100
+  - action: send_payment
+    from: alice
+    to: bob
+    amount: 100
+  - action: send_payment
+    from: alice
+    to: bob
+    amount: 100
+  - action: send_payment
+    from: alice
+    to: bob
+    amount: 100
+  - action: send_payment
+    from: alice
+    to: bob
+    amount: 100
+expect:
+  status: failed
+  reason: insufficient_outbound

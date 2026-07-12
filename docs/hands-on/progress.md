@@ -144,3 +144,13 @@ deterministic giữa các boot. Đã trích **code_hash + index** 5 cell fiber (
 
 E0 (hands-on) · E1-1/1-2/1-4/1-5 · E2-1..E2-4 (skeleton) · E3-1 (schema) · E3-2 (loader) · **E3-3 (compose.template.ts + CKB genesis infra, chờ live-boot)**.
 Issues đóng: #4–17, #41, #42.
+
+## Scenario phức tạp bổ sung (sau E8)
+
+| Scenario | Nội dung | Verify |
+|---|---|---|
+| `round-trip` | Thanh toán hai chiều A→B (300) rồi B→A (100) qua cùng 1 kênh | ✅ cả 2 Success — kênh bidirectional |
+| `channel-drain` | A→B 100 × 5; cạn outbound dần | ✅ 4 Success rồi fail `insufficient_outbound` (`max outbound liquidity 1 CKB`) |
+| `two-hop-bottleneck` | A→C qua B, kênh B→C (200) không đủ đẩy 180 | ✅ `no_route_found` (`PathFind: no path found`) tại hop trung gian |
+
+**Bug fix phát hiện nhờ two-hop-bottleneck:** `classifyFailure`/seeder trước đây kiểm `peerConnected` với **target cuối** — multi-hop thì target không phải peer trực tiếp nên bị phân loại nhầm `peer_offline`. Sửa: kiểm **hop đầu** (peer của kênh sender cấp vốn = `channels.find(from===sender).to`). Re-verify: two-hop-bottleneck→`no_route_found`, peer-offline vẫn `peer_offline`, insufficient-capacity vẫn `insufficient_outbound`.

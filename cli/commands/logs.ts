@@ -33,7 +33,7 @@ function printRpc(log: RunLog): void {
 export function registerLogsCommand(program: Command): void {
   program
     .command("logs <run-id>")
-    .description("In run-log: tóm tắt step + status (mặc định), mọi RPC (--rpc), JSON thô (--json)")
+    .description("In run-log: tóm tắt step + status (mặc định), mọi RPC (--rpc), JSON raw (--json)")
     .option("--json", "In nguyên run-log JSON")
     .option("--rpc", "In đầy đủ mọi RPC call")
     .action(async (runId: string, opts: { json?: boolean; rpc?: boolean }) => {

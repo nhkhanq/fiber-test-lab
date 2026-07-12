@@ -5,7 +5,7 @@ import { listScenarios } from "../../lib/scenario/loader";
 export function registerListCommand(program: Command): void {
   program
     .command("list")
-    .description("Liệt kê scenario có sẵn và các run đang có")
+    .description("List all scenarios and runs")
     .option("--json", "In JSON")
     .action(async (opts: { json?: boolean }) => {
       const [scenarios, runs] = await Promise.all([listScenarios(), listRuns()]);
