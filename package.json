@@ -14,6 +14,16 @@
   "exports": {
     "./test-kit": "./test-kit/index.ts"
   },
+  "files": [
+    "cli",
+    "lib",
+    "test-kit",
+    "topology/docker",
+    "topology/scenarios",
+    "topology/compose.template.ts",
+    "fiber-lab.config.ts",
+    "tsconfig.json"
+  ],
   "scripts": {
     "lab": "tsx cli/index.ts",
     "typecheck": "tsc --noEmit",

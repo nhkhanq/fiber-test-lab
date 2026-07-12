@@ -10,7 +10,7 @@ import {
 import { CliError } from "../errors";
 import { FiberClient } from "../fiber/client";
 import { RunLogStore } from "../runlog/store";
-import { loadScenarioByName } from "./loader";
+import { loadScenario } from "./loader";
 import type { Scenario } from "./schema";
 import { runSeed } from "./seeder";
 import { verifyExpectation, type ExpectationResult } from "./verify";
@@ -23,11 +23,11 @@ export interface ScenarioRunResult {
 }
 
 export async function runScenario(
-  name: string,
+  nameOrPath: string,
   config: GlobalConfig,
   opts: { keep?: boolean } = {},
 ): Promise<ScenarioRunResult> {
-  const scenario = await loadScenarioByName(name);
+  const scenario = await loadScenario(nameOrPath);
   const up = await dockerUp(scenario, config, { keep: opts.keep });
 
   const store = await RunLogStore.resume(up.runId);

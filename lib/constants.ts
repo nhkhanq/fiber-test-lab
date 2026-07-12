@@ -1,3 +1,8 @@
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+export const PACKAGE_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+
 export const EXIT_CODES = {
   ok: 0,
   validation: 1, // config / schema error
@@ -14,7 +19,7 @@ export const MIN_CHANNEL_RESERVE_CKB = 99;
 
 export const RUNS_DIR = ".fiber-lab/runs";
 export const WORK_DIR = ".fiber-lab/work"; // compose files are materialized per run-id
-export const SCENARIOS_DIR = "topology/scenarios";
+export const SCENARIOS_DIR = join(PACKAGE_ROOT, "topology/scenarios");
 
 export const CKB_VERSION = "0.207.0"; // nervos/ckb devnet, aligned with offckb 0.4.7 genesis
 export const CKB_IMAGE = `nervos/ckb:v${CKB_VERSION}`;
@@ -25,7 +30,7 @@ export const FNN_P2P_PORT = 8228; // FNN gossip/p2p
 
 export const CKB_SERVICE = "ckb";
 
-export const DOCKER_BUILD_CONTEXT = "topology/docker";
+export const DOCKER_BUILD_CONTEXT = join(PACKAGE_ROOT, "topology/docker");
 export const FNN_DOCKERFILE = "fnn.Dockerfile";
 export const CKB_DOCKERFILE = "ckb.Dockerfile";
 
