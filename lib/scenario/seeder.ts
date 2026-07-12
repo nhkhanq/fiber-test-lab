@@ -85,7 +85,6 @@ async function waitForRoute(
   }
 }
 
-/** Poll get_payment until Success/Failed (send_payment is async — the initial status is Created/Inflight). */
 async function waitPayment(
   client: FiberClient,
   node: string,

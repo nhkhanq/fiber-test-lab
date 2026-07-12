@@ -12,7 +12,6 @@ interface PaymentState {
   failed_error?: unknown;
 }
 
-/** Poll get_payment until Success/Failed or timeout (returns the last status for the caller to assert) — FNN pushes no events. */
 async function pollPayment(ctx: ScenarioContext, node: string, paymentId: string): Promise<PaymentState> {
   const config = loadConfig();
   const deadline = Date.now() + config.pollTimeoutMs;
@@ -36,7 +35,6 @@ async function fail(ctx: ScenarioContext, message: string): Promise<never> {
   throw new Error(`${message} — run-log: ${runLogPath(ctx.runId)}`);
 }
 
-/** Assert a payment reaches Success (poll RPC). Defaults to the scenario's last payment. */
 export async function expectPaymentSucceeds(
   ctx: ScenarioContext,
   paymentId: string | null = ctx.lastPaymentId,
@@ -48,10 +46,6 @@ export async function expectPaymentSucceeds(
   }
 }
 
-/**
- * Assert a payment fails. A synchronous failure (no hash) reads the recorded error; an async failure polls to Failed.
- * If `reason` is given, classify the error into an ErrorCategory and compare.
- */
 export async function expectPaymentFails(
   ctx: ScenarioContext,
   paymentId: string | null = ctx.lastPaymentId,
@@ -80,7 +74,7 @@ async function assertReason(ctx: ScenarioContext, actual: ErrorCategory | null, 
 }
 
 export interface ChannelStateExpectation {
-  status?: string; // state_name, e.g. "ChannelReady"
+  status?: string; 
   capacity?: number; // funding capacity (CKB)
 }
 
@@ -100,10 +94,6 @@ async function findChannel(ctx: ScenarioContext, channelId: string): Promise<Cha
   return null;
 }
 
-/**
- * Assert a channel's state_name and/or capacity (poll list_channels until the status matches).
- * capacity = local + remote + reserve (list_channels has no funding field; a single-funded channel has 1 reserve).
- */
 export async function expectChannelState(
   ctx: ScenarioContext,
   channelId: string,

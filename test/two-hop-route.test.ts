@@ -19,7 +19,6 @@ describe("two-hop-route", () => {
         const send = store.data.steps.find((s) => s.action === "send_payment");
         const result = send?.result as { status?: string; fee?: string } | undefined;
         expect(result?.status, "payment Success").toBe("Success");
-        // One intermediary hop (Bob) means a routing fee > 0, unlike a direct channel (fee 0).
         expect(Number(result?.fee ?? "0"), "fee > 0 khi qua hop trung gian").toBeGreaterThan(0);
       } finally {
         await reset(up.runId, config);

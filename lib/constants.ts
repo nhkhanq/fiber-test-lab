@@ -36,8 +36,6 @@ export const FNN_SECRET_KEY_PASSWORD = "flab-dev";
 export const FNN_GOSSIP_NETWORK_INTERVAL_MS = 2000;
 export const FNN_GOSSIP_STORE_INTERVAL_MS = 2000;
 
-// UDT (E8-4): the "RUSD" asset maps to the devnet's simple_udt script. These values are deterministic given
-// the pinned dev.toml + CKB v0.207.0 — re-derive (hash the binary + scan genesis block 0) if the genesis changes.
 export const SIMPLE_UDT_CODE_HASH = "0xe1e354d6d643ad42724d40967e334984534e0367405c5ae42a9d7d63d77df419";
 export const SIMPLE_UDT_DEP = {
   txHash: "0xd2beb4f3ff33abce80bdfac6df1afbc087f6b702eb4cd7cdda9272dfcde72834",
