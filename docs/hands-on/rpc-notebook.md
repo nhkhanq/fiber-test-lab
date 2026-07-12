@@ -126,15 +126,34 @@ Kịch bản: kênh alice→bob, alice tiêu được 301 CKB, trả invoice 400
 - `30100000000` = 301 CKB (max outbound), `40000000000` = 400 CKB (required). **Số trong message là DECIMAL** (field RPC khác thì hex — coi chừng).
 - `code: -32000` = generic, KHÔNG phân biệt loại lỗi. Phải **parse `message`** để phân loại.
 
-### Mapping raw error → ErrorCategory (bắt đầu cho E5-4)
-| Chuỗi trong message | ErrorCategory | Scenario |
+### Mapping raw error → ErrorCategory (E5-4 — `lib/scenario/errorCategory.ts::mapError()`)
+| Chuỗi trong message | ErrorCategory | Verify |
 |---|---|---|
-| "Failed to build route" + "Insufficient balance" + "max outbound liquidity ... insufficient" | `insufficient_outbound` | insufficient-capacity (E5-3) |
-| (TODO) no route / no path | `no_route_found` | — |
-| (TODO) invoice expired | `invoice_expired` | expired-invoice (E8-1) |
-| (TODO) peer offline / connection | `peer_offline` | peer-offline (E8-2) |
+| "Failed to build route" + "Insufficient balance" / "max outbound liquidity ... insufficient" | `insufficient_outbound` | E0-5 (invoice), E5-3 (keysend) ✅ |
+| "Failed to build route" + "PathFind error: no path found" | `no_route_found` | E5-2 ✅ |
+| (message TRÙNG insufficient_outbound) + **`list_peers` không còn target** | `peer_offline` | E8-2 ✅ |
+| `InvalidParameter: Failed to validate payment request: "invoice is expired"` | `invoice_expired` | E8-1 ✅ |
 
-→ Hàm `mapError()` trong lib phải match theo substring của message (vì code luôn -32000).
+→ `mapError()` match substring message (code luôn -32000). E5-3: keysend cho CÙNG error như E0-5 invoice: `max outbound liquidity 40100000000 is insufficient, required amount: 45000000000` (401 CKB outbound < 450 CKB).
+
+**E8-2 — peer offline không phân biệt được bằng message.** `docker kill bob` → `send_payment` alice→bob fail với `max outbound liquidity 0 is insufficient` — TRÙNG hệt insufficient_outbound (channel ready+enabled nhưng peer offline ⇒ liquidity dùng được = 0). Phân biệt bằng **`list_peers(alice)` = `[]`** (bob bị xoá khỏi peers NGAY khi send_payment fail, kịp cho seeder ghi `peerConnected:false`). ⇒ `classifyFailure()` ưu tiên peerConnected trước message.
+
+**E8-1 — invoice payment + expired.** `new_invoice(bob, expiry:"0x3"=3s)` → `result.invoice_address` (`fibd1...`). Trả bằng `send_payment [{ invoice }]` (KHÔNG cần target_pubkey/keysend). Sau khi hết hạn → fail ĐỒNG BỘ: `InvalidParameter: Failed to validate payment request: "invoice is expired"` (code -32000, peer vẫn connected) → `invoice_expired`. Seeder: `new_invoice` bắt `invoice_address` theo node nhận; `send_payment useInvoice:true` trả invoice đó.
+
+## 9. Multi-hop routing (E5-2) — graph gossip + fee
+
+- `graph_channels` params `[{}]` → `{ channels: [{ node1, node2, ... }] }`; `graph_nodes` → `{ nodes: [{ node_id, node_name }] }`. Đây là **graph mà node đó đã học qua gossip** (khác `list_channels` = kênh của chính node).
+- Node chỉ tự biết kênh của MÌNH ngay; kênh của node khác (vd alice học `bob↔charlie`) phải chờ **gossip lan**.
+- **Gossip interval mặc định FNN = 60s** (`--fiber-gossip-network-maintenance-interval-ms`, default 60000; store 20000). Không có bootnode như demo-startup ⇒ alice học `bob→charlie` mất >60s → `send_payment` sớm fail `no path found`. **Fix:** set env `FIBER_GOSSIP_NETWORK_MAINTENANCE_INTERVAL_MS`/`..._STORE_...` = 2000 trong compose ⇒ lan ~vài giây, multi-hop tất định.
+- `send_payment` multi-hop giống direct (keysend + target_pubkey) — FNN tự build route nếu graph có path.
+- **fee phân biệt hop:** kênh trực tiếp `fee: 0x0`; qua 1 hop trung gian (bob) `fee: 0x989680` = 10,000,000 shannon = 0.1 CKB (= 0.1% × 100 CKB, khớp `tlc_fee_proportional_millionths: 0x3e8`). `get_payment` KHÔNG trả route/hop count — chỉ có `fee` làm bằng chứng runtime có hop trung gian.
+
+## 10. Event-driven qua subscribe_store_changes (E8-3) — WS
+
+- **Method CÓ TỒN TẠI trong FNN 0.8.0** (không phải chỉ 0.8.1 như system-design đoán). Nhưng **chỉ chạy qua WebSocket** — gọi qua HTTP JSON-RPC trả `-32603 Internal error`. FNN dùng CHUNG port cho WS (`--fiber-reuse-port-for-websocket` default true) ⇒ `ws://127.0.0.1:<port>` = cùng endpoint RPC.
+- Subscribe: gửi `{method:"subscribe_store_changes", params:[]}` → trả `result` = subscription id (số).
+- Notification: `{method:"store_changes", params:{subscription, result:{<Tag>:{...}}}}`. `result` là union có tag: **`PutPaymentSession`** (`payment_hash` + `payment_session.status`), `PutPreimage`, ... 1 payment phát nhiều event khi đổi state.
+- `PutPaymentSession.payment_session.status` chuyển **`Created` → `Success`/`Failed`** (giống get_payment) ⇒ chờ event thay poll. **Phải subscribe TRƯỚC khi gửi payment** để không lỡ event. `lib/fiber/subscribe.ts::subscribePayments()` đệm event theo hash, `wait(hash)` resolve khi terminal; test-kit `ctx.watchPayments(node)`.
 
 ## Ghi chú lệch spec cần sửa
 - Glossary "Fiber RPC methods" ghi `get_node_info` / `close_channel` — thực tế node 0.8 là

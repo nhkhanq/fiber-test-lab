@@ -46,6 +46,7 @@ export const SeedStepSchema = z
     expiresInSec: z.number().positive().optional(),
     node: z.string().optional(),
     durationSec: z.number().positive().optional(),
+    useInvoice: z.boolean().optional(), // send_payment: trả invoice của `to` (new_invoice trước đó) thay vì keysend
   })
   .superRefine((step, ctx) => {
     const require = (field: keyof typeof step, cond = step[field] === undefined) => {

@@ -1,0 +1,18 @@
+name: two-hop-route
+description: Alice pays Charlie routed through Bob (A-B-C, one intermediate hop)
+nodes: [alice, bob, charlie]
+channels:
+  - from: alice
+    to: bob
+    capacity: 500
+  - from: bob
+    to: charlie
+    capacity: 500
+seed:
+  - action: send_payment
+    from: alice
+    to: charlie
+    amount: 100
+expect:
+  status: succeeded
+  routeHops: 1

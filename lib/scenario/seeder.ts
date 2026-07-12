@@ -14,6 +14,13 @@ function ckbToShannon(ckb: number): bigint {
   return BigInt(ckb) * SHANNON_PER_CKB;
 }
 
+/** Target còn kết nối với node gửi không (list_peers). Dùng để phân biệt peer_offline vs insufficient_outbound. */
+async function isPeerConnected(client: FiberClient, node: string, peerPubkey: string): Promise<boolean> {
+  const res = (await client.rawCall(node, "list_peers")) as { peers: { pubkey?: string }[] };
+  const want = peerPubkey.toLowerCase();
+  return res.peers.some((p) => p.pubkey?.toLowerCase() === want);
+}
+
 /** Poll list_peers(node) tới khi peer đã connected (Init xong) — trước khi open_channel. */
 async function waitForPeer(
   client: FiberClient,
@@ -56,6 +63,28 @@ async function openChannel(
       }
       throw e;
     }
+  }
+}
+
+/**
+ * Chờ graph của node gửi biết 1 channel chạm tới target (gossip đã lan) trước khi send_payment —
+ * tránh "PathFind error: no path found" khi route multi-hop chưa propagate (BR-DET-001). Best-effort:
+ * hết timeout thì vẫn để send_payment chạy để lấy lỗi thật. Direct peer đã có sẵn trong graph → trả ngay.
+ */
+async function waitForRoute(
+  client: FiberClient,
+  from: string,
+  targetPubkey: string,
+  config: GlobalConfig,
+): Promise<void> {
+  const deadline = Date.now() + config.pollTimeoutMs;
+  const want = targetPubkey.toLowerCase();
+  while (Date.now() < deadline) {
+    const res = (await client.rawCall(from, "graph_channels", [{}])) as {
+      channels: { node1?: string; node2?: string }[];
+    };
+    if (res.channels.some((c) => c.node1?.toLowerCase() === want || c.node2?.toLowerCase() === want)) return;
+    await sleep(config.pollIntervalMs);
   }
 }
 
@@ -157,31 +186,45 @@ export async function runSeedSteps(
 ): Promise<void> {
   const nodes = resolved ?? (await resolveNodes(scenario, client));
   const pubkey = Object.fromEntries(Object.entries(nodes).map(([n, r]) => [n, r.pubkey]));
+  const invoices: Record<string, string> = {}; // invoice_address theo node nhận (new_invoice → send_payment useInvoice)
 
   for (const step of scenario.seed) {
     switch (step.action) {
       case "send_payment": {
-        const amount = `0x${ckbToShannon(step.amount!).toString(16)}`;
         const input = { from: step.from, to: step.to, amount: step.amount };
         try {
-          // send_payment có thể lỗi đồng bộ (vd insufficient outbound) — record, KHÔNG throw.
-          const res = (await client.rawCall(step.from!, "send_payment", [
-            { target_pubkey: pubkey[step.to!]!, amount, keysend: true },
-          ])) as { payment_hash: string };
+          let paymentParams: Record<string, unknown>;
+          if (step.useInvoice) {
+            const invoice = invoices[step.to!];
+            if (!invoice) throw new Error(`send_payment useInvoice: chưa có invoice cho "${step.to}"`);
+            paymentParams = { invoice };
+          } else {
+            await waitForRoute(client, step.from!, pubkey[step.to!]!, config);
+            paymentParams = { target_pubkey: pubkey[step.to!]!, amount: `0x${ckbToShannon(step.amount!).toString(16)}`, keysend: true };
+          }
+          // send_payment có thể lỗi đồng bộ (insufficient outbound / invoice expired) — record, KHÔNG throw.
+          const res = (await client.rawCall(step.from!, "send_payment", [paymentParams])) as { payment_hash: string };
           const final = await waitPayment(client, step.from!, res.payment_hash, config);
           store.recordStep("send_payment", input, final);
         } catch (e) {
-          store.recordStep("send_payment", input, { error: e instanceof Error ? e.message : String(e) });
+          const message = e instanceof Error ? e.message : String(e);
+          // Lỗi "max outbound liquidity 0" khi peer offline TRÙNG với insufficient_outbound → ghi kèm
+          // trạng thái kết nối để phân loại đúng (E8-2). Lỗi truy vấn peer → coi như còn kết nối.
+          const peerConnected = await isPeerConnected(client, step.from!, pubkey[step.to!]!).catch(() => true);
+          store.recordStep("send_payment", input, { error: message, peerConnected });
         }
         break;
       }
       case "new_invoice": {
-        const res = await client.newInvoice(step.to!, {
-          amount: ckbToShannon(step.amount!),
+        const params: Record<string, unknown> = {
+          amount: `0x${ckbToShannon(step.amount!).toString(16)}`,
           currency: "Fibd",
-          paymentPreimage: `0x${randomBytes(32).toString("hex")}`,
-          expiry: step.expiresInSec,
-        });
+          payment_preimage: `0x${randomBytes(32).toString("hex")}`,
+          description: `${scenario.name}:${step.to}`,
+        };
+        if (step.expiresInSec !== undefined) params.expiry = `0x${step.expiresInSec.toString(16)}`;
+        const res = (await client.rawCall(step.to!, "new_invoice", [params])) as { invoice_address: string };
+        invoices[step.to!] = res.invoice_address;
         store.recordStep("new_invoice", { to: step.to, amount: step.amount }, res);
         break;
       }

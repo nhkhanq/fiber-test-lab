@@ -1,0 +1,15 @@
+name: insufficient-capacity
+description: Alice pays more than her channel outbound allows, payment fails
+nodes: [alice, bob]
+channels:
+  - from: alice
+    to: bob
+    capacity: 500
+seed:
+  - action: send_payment
+    from: alice
+    to: bob
+    amount: 450
+expect:
+  status: failed
+  reason: insufficient_outbound

@@ -42,6 +42,11 @@ export const FNN_BASE_DIR = "/fiber-node";
 export const DEV_CHAIN_SPEC = "/flab/dev.toml";
 export const FNN_SECRET_KEY_PASSWORD = "flab-dev";
 
+// Ép gossip lan nhanh trên devnet 1 host — mặc định FNN 60s/20s làm multi-hop route chờ lâu, phi tất định
+// (E5-2: alice học channel bob→charlie chậm > timeout). Không có bootnode như demo-startup nên phải tự tăng tốc.
+export const FNN_GOSSIP_NETWORK_INTERVAL_MS = 2000;
+export const FNN_GOSSIP_STORE_INTERVAL_MS = 2000;
+
 // Privkey pre-fund sẵn trong genesis (dev.toml issued_cells) — gán theo node index. CHỈ devnet, không bí mật.
 // Mỗi node có 10 tỷ CKB từ genesis ⇒ mở channel ngay, không cần faucet runtime.
 export const DEV_FUNDED_KEYS = [
