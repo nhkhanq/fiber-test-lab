@@ -8,7 +8,7 @@ const SCENARIO = "direct-channel";
 const RUNS = 3;
 const PER_RUN_TIMEOUT_MS = 240_000;
 
-// Chuẩn hoá kết quả về phần tất định (bỏ run-id/timestamp/hash/port) để so 3 run — BR-DET-001.
+// Normalize to the deterministic parts (drop run-id/timestamp/hash/port) to compare 3 runs — BR-DET-001.
 function outcome(store: RunLogStore): unknown {
   return store.data.steps.map((s) => {
     if (s.action === "send_payment") {
@@ -21,7 +21,7 @@ function outcome(store: RunLogStore): unknown {
 
 describe("direct-channel determinism", () => {
   it(
-    `cho cùng kết quả qua ${RUNS} run`,
+    `produces the same result across ${RUNS} runs`,
     async () => {
       const config = loadConfig();
       const outcomes: unknown[] = [];
@@ -29,7 +29,7 @@ describe("direct-channel determinism", () => {
       for (let i = 0; i < RUNS; i++) {
         const { up, store, expectation } = await runScenario(SCENARIO, config);
         try {
-          expect(expectation?.match, `run ${i}: expect phải khớp`).toBe(true);
+          expect(expectation?.match, `run ${i}: expectation should match`).toBe(true);
           const send = store.data.steps.find((s) => s.action === "send_payment");
           expect((send?.result as { status?: string })?.status, `run ${i}: payment Success`).toBe("Success");
           outcomes.push(outcome(store));
@@ -39,7 +39,7 @@ describe("direct-channel determinism", () => {
       }
 
       for (let i = 1; i < RUNS; i++) {
-        expect(outcomes[i], `run ${i} phải giống run 0`).toEqual(outcomes[0]);
+        expect(outcomes[i], `run ${i} should equal run 0`).toEqual(outcomes[0]);
       }
     },
     PER_RUN_TIMEOUT_MS * RUNS,

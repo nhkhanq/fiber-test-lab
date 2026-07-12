@@ -5,12 +5,12 @@ const TIMEOUT_MS = 300_000;
 
 describe("test-kit examples: event-driven", () => {
   it(
-    "chờ payment Success qua subscribe_store_changes (WS), không poll",
+    "waits for payment Success via subscribe_store_changes (WS), no polling",
     async () => {
       const ctx = await setupScenario("direct-channel");
       const watcher = await ctx.watchPayments("alice");
       try {
-        // Subscribe TRƯỚC khi gửi → không lỡ event. Gửi 1 payment mới, chờ bằng event.
+        // Subscribe BEFORE sending so no event is missed. Send a fresh payment, then wait on the event.
         const bob = (await ctx.call("bob", "node_info")) as { pubkey: string };
         const res = (await ctx.call("alice", "send_payment", [
           { target_pubkey: bob.pubkey, amount: "0x2540be400", keysend: true },

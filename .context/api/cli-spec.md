@@ -20,7 +20,7 @@ tags: [cli, commander, commands]
 Dựng topology cho kịch bản.
 - `<scenario>` — tên file trong `topology/scenarios/` (không cần đuôi `.yaml`)
 - `--keep` — không tự teardown khi lỗi (để debug)
-- **Làm gì:** validate YAML → sinh run-id → sinh compose động → `docker compose up` → chờ node ready → offckb faucet → mở channel theo `channels` → chờ channel READY.
+- **Làm gì:** validate YAML → sinh run-id → sinh compose động → `docker compose up` → chờ node ready → genesis pre-fund (không faucet runtime) → mở channel theo `channels` → chờ channel READY.
 - **Output:** in `run-id` (dùng cho các lệnh sau). `--json` → `{ runId, network, nodes: [...] }`.
 - **Lỗi:** schema sai → exit 1; docker/RPC lỗi → exit 2, run-log ghi lại nguyên nhân.
 

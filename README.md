@@ -47,6 +47,10 @@ Bundled scenarios (see [`docs/scenario-catalog.md`](docs/scenario-catalog.md) fo
 - **`direct-channel`** — alice pays bob over one channel (fee 0, deterministic over 3 runs).
 - **`two-hop-route`** — alice pays charlie routed through bob (`routeHops: 1`, non-zero routing fee).
 - **`insufficient-capacity`** — payment exceeds outbound → fails with `reason: insufficient_outbound`.
+- **`multi-asset`** — Alice pays Bob in RUSD (sUDT) over a UDT channel (seeder mints the token, opens a UDT channel, pays).
+- **`round-trip`** — bidirectional payments over one channel (A→B, then B→A).
+- **`channel-drain`** — repeated payments deplete outbound until one fails with `insufficient_outbound`.
+- **`two-hop-bottleneck`** — the intermediary hop lacks liquidity to forward → `no_route_found`.
 
 A scenario is a YAML file in `topology/scenarios/`:
 

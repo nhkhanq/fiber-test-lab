@@ -8,12 +8,12 @@ const TIMEOUT_MS = 300_000;
 
 describe("insufficient-capacity", () => {
   it(
-    "payment vượt outbound → fail với reason insufficient_outbound",
+    "payment exceeds outbound -> fails with reason insufficient_outbound",
     async () => {
       const config = loadConfig();
       const { up, store, expectation } = await runScenario(SCENARIO, config);
       try {
-        expect(expectation?.match, "expect phải khớp (status failed + reason)").toBe(true);
+        expect(expectation?.match, "expectation should match (failed status + reason)").toBe(true);
         expect(expectation?.actual).toBe("failed");
         expect(expectation?.reason).toEqual({
           expected: "insufficient_outbound",
@@ -22,7 +22,7 @@ describe("insufficient-capacity", () => {
         });
 
         const send = store.data.steps.find((s) => s.action === "send_payment");
-        expect((send?.result as { error?: string })?.error, "lỗi thô có nhắc outbound liquidity").toMatch(
+        expect((send?.result as { error?: string })?.error, "raw error mentions outbound liquidity").toMatch(
           /outbound liquidity|Insufficient balance/i,
         );
       } finally {

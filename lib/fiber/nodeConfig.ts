@@ -10,6 +10,9 @@ import {
   DEV_FUNDED_KEYS,
   FNN_P2P_PORT,
   FNN_RPC_PORT,
+  SIMPLE_UDT_CODE_HASH,
+  SIMPLE_UDT_DEP,
+  UDT_ASSET,
 } from "../constants";
 import type { Scenario } from "../scenario/schema";
 
@@ -24,7 +27,7 @@ function nodeConfigYaml(node: string): string {
     fiber: {
       listening_addr: `/ip4/0.0.0.0/tcp/${FNN_P2P_PORT}`,
       announced_node_name: node,
-      // announce địa chỉ dns4 theo tên node (resolve qua docker DNS trong network) → peer connect được.
+      // Announce a /dns4/<node> address (resolves via docker DNS on the network) so peers can connect.
       announce_listening_addr: true,
       announced_addrs: [`/dns4/${node}/tcp/${FNN_P2P_PORT}`],
       chain: DEV_CHAIN_SPEC,
@@ -32,26 +35,40 @@ function nodeConfigYaml(node: string): string {
       announce_private_addr: true,
     },
     rpc: {
-      // entrypoint override RPC_LISTENING_ADDR = <container-ip>:port (tránh biscuit).
+      // The entrypoint overrides RPC_LISTENING_ADDR = <container-ip>:port (to bypass biscuit auth).
       listening_addr: `0.0.0.0:${FNN_RPC_PORT}`,
       enabled_modules: ["channel", "payment", "graph", "info", "invoice", "peer", "pubsub", "dev"],
     },
-    ckb: { rpc_url: `http://${CKB_SERVICE}:${CKB_RPC_PORT}` },
+    ckb: {
+      rpc_url: `http://${CKB_SERVICE}:${CKB_RPC_PORT}`,
+      udt_whitelist: [
+        {
+          name: UDT_ASSET,
+          script: { code_hash: SIMPLE_UDT_CODE_HASH, hash_type: "data", args: "0x.*" },
+          cell_deps: [
+            {
+              cell_dep: {
+                out_point: { tx_hash: SIMPLE_UDT_DEP.txHash, index: `0x${SIMPLE_UDT_DEP.index.toString(16)}` },
+                dep_type: "code",
+              },
+            },
+          ],
+          auto_accept_amount: 1,
+        },
+      ],
+    },
     services: ["fiber", "rpc", "ckb"],
   });
 }
 
-/**
- * Sinh base dir per-node (config.yml + fiber/sk + ckb/key) trước khi `up`.
- * Key ngẫu nhiên theo run (lưu lại để faucet cấp tiền + test-kit dùng).
- */
+
 export async function generateNodeConfigs(
   scenario: Scenario,
   runId: string,
 ): Promise<GeneratedNode[]> {
   if (scenario.nodes.length > DEV_FUNDED_KEYS.length) {
     throw new Error(
-      `Scenario "${scenario.name}" có ${scenario.nodes.length} node, chỉ có ${DEV_FUNDED_KEYS.length} account pre-fund trong genesis.`,
+      `Scenario "${scenario.name}" has ${scenario.nodes.length} nodes, but only ${DEV_FUNDED_KEYS.length} accounts are pre-funded in genesis.`,
     );
   }
 
@@ -65,7 +82,6 @@ export async function generateNodeConfigs(
     await writeFile(join(dir, "fiber", "sk"), randomBytes(32));
     await chmod(join(dir, "fiber", "sk"), 0o600);
 
-    // Key pre-fund theo index (10 tỷ CKB từ genesis) — mở channel không cần faucet.
     const ckbPrivKey = DEV_FUNDED_KEYS[i]!;
     await writeFile(join(dir, "ckb", "key"), ckbPrivKey);
 

@@ -22,7 +22,6 @@ export interface ExpectationResult {
   reason?: ReasonResult;
 }
 
-/** Số hop trung gian ngắn nhất giữa 2 node trên đồ thị channel (vô hướng) — edges-1, hoặc null nếu không có path. */
 function hopsBetween(channels: Channel[], from: string, to: string): number | null {
   const adj = new Map<string, string[]>();
   const link = (a: string, b: string) => adj.set(a, [...(adj.get(a) ?? []), b]);
@@ -45,7 +44,6 @@ function hopsBetween(channels: Channel[], from: string, to: string): number | nu
   return null;
 }
 
-/** routeHops: số hop từ topology, đối chiếu fee thật (qua ≥1 hop trung gian ⇒ fee > 0; direct ⇒ fee 0). */
 function verifyRouteHops(scenario: Scenario, payments: StepRecord[], allSucceeded: boolean): RouteHopsResult {
   const expected = scenario.expect.routeHops!;
   const first = payments[0]!;
@@ -56,7 +54,6 @@ function verifyRouteHops(scenario: Scenario, payments: StepRecord[], allSucceede
   return { expected, actual, match: actual === expected && feeConsistent };
 }
 
-/** reason: phân loại lỗi send_payment fail → ErrorCategory, so với expect.reason (chỉ khi status failed). */
 function verifyReason(scenario: Scenario, payments: StepRecord[]): ReasonResult {
   const expected = scenario.expect.reason!;
   const failed = payments.find((p) => (p.result as { status?: string } | null)?.status !== "Success");
@@ -64,10 +61,6 @@ function verifyReason(scenario: Scenario, payments: StepRecord[]): ReasonResult 
   return { expected, actual, match: actual === expected };
 }
 
-/**
- * So khớp `expect` với kết quả các bước send_payment đã ghi: status (coarse succeeded/failed),
- * routeHops và reason (nếu khai). `match` gộp cả ba. Không có send_payment → null (không có gì để kiểm).
- */
 export function verifyExpectation(scenario: Scenario, steps: StepRecord[]): ExpectationResult | null {
   const payments = steps.filter((s) => s.action === "send_payment");
   if (payments.length === 0) return null;

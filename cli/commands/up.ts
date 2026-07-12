@@ -7,18 +7,18 @@ import { runScenario } from "../../lib/scenario/run";
 export function registerUpCommand(program: Command): void {
   program
     .command("up <scenario>")
-    .description("Dựng topology + seed cho 1 scenario, in run-id")
-    .option("--json", "In JSON")
-    .option("--keep", "Không tự teardown khi lỗi (debug)")
+    .description("Build the topology, run the seed, and print the run-id")
+    .option("--json", "Print JSON")
+    .option("--keep", "Keep containers on failure for debugging")
     .action(async (scenarioName: string, opts: { json?: boolean; keep?: boolean }) => {
       const config = loadConfig();
 
-      // ScenarioValidationError → exit 1, DockerError → exit 2 (map ở top-level handler).
+      // ScenarioValidationError -> exit 1, DockerError -> exit 2.
       const { up, store, expectation } = await runScenario(scenarioName, config, { keep: opts.keep });
 
       if (expectation && !expectation.match) {
         throw new CliError(
-          `Kỳ vọng không khớp: expect.status=${expectation.expected} nhưng thực tế=${expectation.actual}. Run ${up.runId} vẫn chạy — xem \`fiber-lab logs ${up.runId}\`.`,
+          `Expectation mismatch: expected ${expectation.expected} but got ${expectation.actual}. Run ${up.runId} is still up — see \`fiber-lab logs ${up.runId}\`.`,
           EXIT_CODES.expectation,
         );
       }

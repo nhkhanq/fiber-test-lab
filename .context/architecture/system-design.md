@@ -2,7 +2,7 @@
 type: architecture
 version: 1.0
 last_updated: 2026-07-04
-tags: [typescript, docker-compose, fiber-node, offckb, cli, testing, local]
+tags: [typescript, docker-compose, fiber-node, ckb-devnet, cli, testing, local]
 ---
 
 # System Design — Fiber Test Lab
@@ -21,7 +21,7 @@ tags: [typescript, docker-compose, fiber-node, offckb, cli, testing, local]
 | Hạ tầng docker nền | **fork `fiber-demo-startup`** (`demo-0.8`) | ĐÃ dockerize sẵn CKB dev chain + nhiều FNN node + transfer container — không dựng lại từ đầu (xem mục 2b) |
 | Container orchestration | Docker + Docker Compose (v2, `docker compose`) | Điều phối N node Fiber + CKB dev chain, cô lập mạng nội bộ |
 | Fiber node | FNN binary (chính thức, pinned version) — image từ demo-startup | Node THẬT, không giả lập giao thức — kết quả test phản ánh hành vi thật |
-| CKB devnet | CKB dev chain (từ compose demo-startup) | Devnet local + transfer container cấp tiền, không phụ thuộc testnet. (offckb = phương án thay thế nếu cần) |
+| CKB devnet | CKB dev chain tự dựng (image `nervos/ckb:v0.207.0` + `dev.toml` genesis tự bake) | Devnet local, cấp tiền qua **genesis pre-fund** (3 key cố định, 10 tỷ CKB/node) — KHÔNG dùng offckb/transfer container. Tương thích convention offckb 0.4.7. |
 | Gọi Fiber RPC | `@ckb-ccc/fiber` (SDK chính thức) | SDK hackathon khuyến nghị, tránh tự viết JSON-RPC thô |
 | Test framework | Vitest | Nhẹ, nhanh, dùng cho `test-kit` và test mẫu |
 | Lưu run-log | File JSON (fs) | Vòng đời dữ liệu ngắn — không cần Postgres (xem mục 8) |
@@ -71,9 +71,10 @@ Chính `fiber-demo-startup` tự nêu 4 thứ nó THIẾU để thành test harn
 │   │        │               │               │                       │ │
 │   │        └───────────────┴───────────────┘                       │ │
 │   │                        │ (mỗi fnn kết nối tới CKB devnet)       │ │
-│   │                 ┌──────▼───────┐                                │ │
-│   │                 │ offckb devnet│  (CKB node local)             │ │
-│   │                 └──────────────┘                                │ │
+│   │              ┌──────────▼─────────────┐                         │ │
+│   │              │ CKB devnet container   │  (nervos/ckb v0.207.0,  │ │
+│   │              │ genesis tự bake)       │   không phải offckb)    │ │
+│   │              └────────────────────────┘                         │ │
 │   └───────────────────────────────────────────────────────────────┘ │
 │                     ▲                                                 │
 │                     │ RPC (chỉ CLI + test-kit gọi vào, qua           │
@@ -139,10 +140,10 @@ Dev muốn thêm 1 loại lỗi mới → tạo file `.yaml` mới theo schema, 
 1. CLI đọc scenarios/two-hop-route.yaml
 2. loader.ts validate bằng zod → nếu sai schema: in lỗi rõ, exit 1 (chưa đụng docker)
 3. sinh run-id (VD: ts + random ngắn) → network name = flab_<run-id>
-4. orchestrator.ts sinh compose động: 3 service fnn (alice/bob/carol) + 1 offckb,
+4. orchestrator.ts sinh compose động: N service fnn (alice/bob/carol) + 1 CKB devnet,
    tất cả trong network flab_<run-id>, container name có prefix run-id
-5. docker compose up -d → chờ health-check các node sẵn sàng (poll get_node_info)
-6. offckb faucet cấp CKB cho địa chỉ funding của từng node
+5. docker compose up -d → chờ health-check các node sẵn sàng (poll node_info)
+6. cấp CKB qua genesis pre-fund (3 key cố định nạp sẵn trong dev.toml) — không cần faucet runtime
 7. seeder.ts đọc phần `channels` → gọi open_channel alice→bob, bob→carol,
    chờ channel READY (poll list_channels)
 8. seeder.ts đọc phần `seed` → thực thi (VD send_payment alice→carol amount 100)
@@ -175,7 +176,7 @@ FNN không push event khi channel/payment đổi trạng thái — phải chủ 
 
 ## 9. Bảo mật / cô lập mạng
 
-- Mọi container `fnn` + `offckb` chỉ nghe trong docker internal network `flab_<run-id>`, KHÔNG bind port ra host/internet mặc định.
+- Mọi container `fnn` + CKB devnet chỉ nghe trong docker internal network `flab_<run-id>`, KHÔNG bind port ra host/internet mặc định.
 - Lý do: node test dùng key/tiền devnet giả — nếu lộ port, node lạ kết nối vào phá vỡ topology đã khai báo → sai kết quả test.
 - Chỉ khi test-kit cần gọi RPC từ tiến trình Vitest (ngoài docker) mới cấp port map tạm theo run-id, đóng lại khi reset.
 
@@ -221,7 +222,7 @@ fiber-test-lab/
 | Bề mặt | Web dashboard + REST API + webhook | CLI + file YAML + test-kit |
 | Dữ liệu | PostgreSQL (lâu dài) | File JSON (tạm, reset được) |
 | Số node | 1 node ra thế giới ngoài | Nhiều node nói chuyện với nhau, mạng kín |
-| Môi trường | testnet | offckb devnet local |
+| Môi trường | testnet | CKB devnet local (tự bake, ~offckb) |
 | Phụ thuộc | Không import P3 | Không import P1 |
 
 Quy tắc: repo riêng, không import `@fibergate/sdk`, không cần FiberGate chạy. Điểm chung DUY NHẤT được phép: cùng dùng SDK chính thức `@ckb-ccc/fiber` (không phải chia sẻ code, chỉ là cùng chọn 1 thư viện chuẩn).

@@ -1,0 +1,18 @@
+name: two-hop-bottleneck
+description: Alice pays Charlie via Bob, but the Bob-Charlie hop lacks the liquidity to forward it — routing fails
+nodes: [alice, bob, charlie]
+channels:
+  - from: alice
+    to: bob
+    capacity: 500
+  - from: bob
+    to: charlie
+    capacity: 200
+seed:
+  - action: send_payment
+    from: alice
+    to: charlie
+    amount: 180
+expect:
+  status: failed
+  reason: no_route_found

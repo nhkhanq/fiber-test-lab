@@ -36,7 +36,7 @@ export class FiberClient {
       const endpoint = this.#endpoints[node];
       if (!endpoint) {
         throw new Error(
-          `Unknown node "${node}" — chưa cấu hình endpoint (có: ${Object.keys(this.#endpoints).join(", ") || "none"})`,
+          `Unknown node "${node}" — no endpoint configured (have: ${Object.keys(this.#endpoints).join(", ") || "none"})`,
         );
       }
       sdk = new FiberSDK({ endpoint, timeout: this.#timeoutMs });
@@ -62,14 +62,11 @@ export class FiberClient {
     }
   }
 
-  /**
-   * JSON-RPC thô tới 1 node (bỏ qua SDK), có log. Dùng cho method mà SDK canary lệch field
-   * so với FNN 0.8 (vd open_channel: SDK gửi `peer_id`, FNN 0.8 đòi `pubkey`).
-   */
+
   async rawCall(node: string, method: string, params: unknown[] = []): Promise<unknown> {
     const at = new Date().toISOString();
     const endpoint = this.#endpoints[node];
-    if (!endpoint) throw new Error(`Unknown node "${node}" — chưa cấu hình endpoint`);
+    if (!endpoint) throw new Error(`Unknown node "${node}" — no endpoint configured`);
     try {
       const res = await fetch(endpoint, {
         method: "POST",
@@ -79,7 +76,7 @@ export class FiberClient {
       const json = (await res.json()) as { result?: unknown; error?: { message?: string } };
       if (json.error) {
         this.#logger?.({ node, method, params, error: json.error, at });
-        throw new Error(`RPC ${method} lỗi: ${json.error.message ?? JSON.stringify(json.error)}`);
+        throw new Error(`RPC ${method} failed: ${json.error.message ?? JSON.stringify(json.error)}`);
       }
       this.#logger?.({ node, method, params, response: json.result, at });
       return json.result;
