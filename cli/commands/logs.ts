@@ -1,4 +1,6 @@
 import type { Command } from "commander";
+import { EXIT_CODES } from "../../lib/constants";
+import { CliError } from "../../lib/errors";
 import { RunLogStore, type RunLog } from "../../lib/runlog/store";
 
 function printSummary(log: RunLog): void {
@@ -37,13 +39,10 @@ export function registerLogsCommand(program: Command): void {
     .action(async (runId: string, opts: { json?: boolean; rpc?: boolean }) => {
       const log = await RunLogStore.load(runId).catch((error) => {
         if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-          console.error(`Không tìm thấy run-log "${runId}" (trong .fiber-lab/runs/).`);
-          process.exitCode = 1;
-          return null;
+          throw new CliError(`Không tìm thấy run-log "${runId}" (trong .fiber-lab/runs/).`, EXIT_CODES.validation);
         }
         throw error;
       });
-      if (!log) return;
 
       if (opts.json) console.log(JSON.stringify(log, null, 2));
       else if (opts.rpc) printRpc(log);

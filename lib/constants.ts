@@ -1,3 +1,13 @@
+// Exit code chuẩn CLI (cli-spec §Quy ước chung).
+export const EXIT_CODES = {
+  ok: 0,
+  validation: 1, // lỗi cấu hình / schema
+  runtime: 2, // lỗi docker / RPC
+  expectation: 3, // expect không khớp
+} as const;
+
+export type ExitCode = (typeof EXIT_CODES)[keyof typeof EXIT_CODES];
+
 export const SHANNON_PER_CKB = 100_000_000n;
 
 // Verify tay ở E0: node auto-accept min funding = 100 CKB; mỗi bên reserve ~99 CKB.
