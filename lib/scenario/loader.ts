@@ -15,7 +15,7 @@ export class ScenarioValidationError extends Error {
     readonly issues: ScenarioIssue[],
   ) {
     super(
-      `Scenario không hợp lệ (${file}):\n` +
+      `Invalid scenario (${file}):\n` +
         issues.map((i) => `  - ${i.path}: ${i.message}`).join("\n"),
     );
     this.name = "ScenarioValidationError";
@@ -33,7 +33,7 @@ export async function loadScenarioFile(filePath: string): Promise<Scenario> {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       throw new ScenarioValidationError(filePath, [
-        { path: "(file)", message: `Không tìm thấy file scenario "${filePath}"` },
+        { path: "(file)", message: `Scenario file "${filePath}" not found` },
       ]);
     }
     throw error;
@@ -63,7 +63,7 @@ export async function loadScenarioFile(filePath: string): Promise<Scenario> {
   const expected = basename(filePath).replace(/\.ya?ml$/i, "");
   if (scenario.name !== expected) {
     throw new ScenarioValidationError(filePath, [
-      { path: "name", message: `name "${scenario.name}" không khớp tên file "${expected}"` },
+      { path: "name", message: `name "${scenario.name}" does not match file name "${expected}"` },
     ]);
   }
 
@@ -81,7 +81,6 @@ export interface ScenarioSummary {
   error?: string;
 }
 
-/** Mọi scenario trong `topology/scenarios/`, dùng cho `fiber-lab list`. File lỗi vẫn liệt kê (valid: false). */
 export async function listScenarios(): Promise<ScenarioSummary[]> {
   const files = await readdir(SCENARIOS_DIR).catch(() => [] as string[]);
   const summaries: ScenarioSummary[] = [];

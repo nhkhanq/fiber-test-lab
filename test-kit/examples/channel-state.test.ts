@@ -5,7 +5,7 @@ const TIMEOUT_MS = 300_000;
 
 describe("test-kit examples: channel state", () => {
   it(
-    "direct-channel: kênh alice→bob ChannelReady, capacity 500 CKB",
+    "direct-channel: alice->bob channel is ChannelReady with capacity 500 CKB",
     async () => {
       const ctx = await setupScenario("direct-channel");
       try {
@@ -13,7 +13,7 @@ describe("test-kit examples: channel state", () => {
           channels: { channel_id: string }[];
         };
         const channelId = res.channels[0]?.channel_id;
-        expect(channelId, "alice phải có 1 channel").toBeTruthy();
+        expect(channelId, "alice should have one channel").toBeTruthy();
 
         await expectChannelState(ctx, channelId!, { status: "ChannelReady", capacity: 500 });
       } finally {

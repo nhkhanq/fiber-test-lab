@@ -12,7 +12,7 @@ interface PaymentState {
   failed_error?: unknown;
 }
 
-/** Poll get_payment tới Success/Failed hoặc hết timeout (trả trạng thái cuối để caller assert) — FNN không push event. */
+/** Poll get_payment until Success/Failed or timeout (returns the last status for the caller to assert) — FNN pushes no events. */
 async function pollPayment(ctx: ScenarioContext, node: string, paymentId: string): Promise<PaymentState> {
   const config = loadConfig();
   const deadline = Date.now() + config.pollTimeoutMs;
@@ -36,21 +36,21 @@ async function fail(ctx: ScenarioContext, message: string): Promise<never> {
   throw new Error(`${message} — run-log: ${runLogPath(ctx.runId)}`);
 }
 
-/** Assert payment tới trạng thái Success (poll RPC). Mặc định kiểm payment cuối của scenario. */
+/** Assert a payment reaches Success (poll RPC). Defaults to the scenario's last payment. */
 export async function expectPaymentSucceeds(
   ctx: ScenarioContext,
   paymentId: string | null = ctx.lastPaymentId,
 ): Promise<void> {
-  if (!paymentId) await fail(ctx, `expectPaymentSucceeds: không có payment để kiểm (run ${ctx.runId})`);
+  if (!paymentId) await fail(ctx, `expectPaymentSucceeds: no payment to check (run ${ctx.runId})`);
   const final = await pollPayment(ctx, payerFor(ctx, paymentId!), paymentId!);
   if (final.status !== "Success") {
-    await fail(ctx, `expectPaymentSucceeds: payment ${paymentId!.slice(0, 12)}… status ${final.status} (mong Success)`);
+    await fail(ctx, `expectPaymentSucceeds: payment ${paymentId!.slice(0, 12)}… has status ${final.status} (expected Success)`);
   }
 }
 
 /**
- * Assert payment thất bại. Payment lỗi đồng bộ (không hash) → đọc lỗi thô đã ghi; lỗi bất đồng bộ → poll tới Failed.
- * Nếu `reason` được truyền, map lỗi thô → ErrorCategory và so khớp.
+ * Assert a payment fails. A synchronous failure (no hash) reads the recorded error; an async failure polls to Failed.
+ * If `reason` is given, classify the error into an ErrorCategory and compare.
  */
 export async function expectPaymentFails(
   ctx: ScenarioContext,
@@ -60,14 +60,14 @@ export async function expectPaymentFails(
   if (!paymentId) {
     const last = [...ctx.store.data.steps].reverse().find((s) => s.action === "send_payment");
     const result = last?.result as { error?: unknown; peerConnected?: boolean } | null;
-    if (!result || result.error === undefined) await fail(ctx, `expectPaymentFails: không có payment nào (run ${ctx.runId})`);
+    if (!result || result.error === undefined) await fail(ctx, `expectPaymentFails: no payment found (run ${ctx.runId})`);
     await assertReason(ctx, classifyFailure(result), reason);
     return;
   }
 
   const final = await pollPayment(ctx, payerFor(ctx, paymentId), paymentId);
   if (final.status !== "Failed") {
-    await fail(ctx, `expectPaymentFails: payment ${paymentId.slice(0, 12)}… status ${final.status} (mong Failed)`);
+    await fail(ctx, `expectPaymentFails: payment ${paymentId.slice(0, 12)}… has status ${final.status} (expected Failed)`);
   }
   await assertReason(ctx, mapError(String(final.failed_error ?? "")), reason);
 }
@@ -75,12 +75,12 @@ export async function expectPaymentFails(
 async function assertReason(ctx: ScenarioContext, actual: ErrorCategory | null, reason?: ErrorCategory): Promise<void> {
   if (!reason) return;
   if (actual !== reason) {
-    await fail(ctx, `expectPaymentFails: reason "${actual ?? "unknown"}" ≠ mong "${reason}"`);
+    await fail(ctx, `expectPaymentFails: reason "${actual ?? "unknown"}" != expected "${reason}"`);
   }
 }
 
 export interface ChannelStateExpectation {
-  status?: string; // state_name, VD "ChannelReady"
+  status?: string; // state_name, e.g. "ChannelReady"
   capacity?: number; // funding capacity (CKB)
 }
 
@@ -101,8 +101,8 @@ async function findChannel(ctx: ScenarioContext, channelId: string): Promise<Cha
 }
 
 /**
- * Assert state_name và/hoặc capacity của 1 channel (poll list_channels tới khi status khớp).
- * capacity = local + remote + reserve (list_channels KHÔNG có field funding; kênh single-funded ⇒ 1 reserve).
+ * Assert a channel's state_name and/or capacity (poll list_channels until the status matches).
+ * capacity = local + remote + reserve (list_channels has no funding field; a single-funded channel has 1 reserve).
  */
 export async function expectChannelState(
   ctx: ScenarioContext,
@@ -118,15 +118,15 @@ export async function expectChannelState(
     channel = await findChannel(ctx, channelId);
   }
 
-  if (!channel) await fail(ctx, `expectChannelState: không tìm thấy channel ${channelId.slice(0, 12)}…`);
+  if (!channel) await fail(ctx, `expectChannelState: channel ${channelId.slice(0, 12)}… not found`);
   if (expected.status !== undefined && channel!.state.state_name !== expected.status) {
-    await fail(ctx, `expectChannelState: state "${channel!.state.state_name}" ≠ mong "${expected.status}"`);
+    await fail(ctx, `expectChannelState: state "${channel!.state.state_name}" != expected "${expected.status}"`);
   }
   if (expected.capacity !== undefined) {
     const balances = BigInt(channel!.local_balance) + BigInt(channel!.remote_balance);
     const capacity = Number(balances / SHANNON_PER_CKB) + MIN_CHANNEL_RESERVE_CKB;
     if (capacity !== expected.capacity) {
-      await fail(ctx, `expectChannelState: capacity ${capacity} CKB ≠ mong ${expected.capacity} CKB`);
+      await fail(ctx, `expectChannelState: capacity ${capacity} CKB != expected ${expected.capacity} CKB`);
     }
   }
 }

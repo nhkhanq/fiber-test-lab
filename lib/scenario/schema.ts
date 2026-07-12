@@ -22,7 +22,7 @@ export const ChannelSchema = z.object({
     .number()
     .positive()
     .refine((c) => c >= MIN_CHANNEL_CAPACITY_CKB, {
-      message: `capacity phải >= ${MIN_CHANNEL_CAPACITY_CKB} CKB (mức funding tối thiểu của node; mỗi bên reserve ~99 CKB)`,
+      message: `capacity must be >= ${MIN_CHANNEL_CAPACITY_CKB} CKB (the node's minimum funding amount; each side reserves ~99 CKB)`,
     }),
   asset: AssetSchema.default("CKB"),
   push: z.number().nonnegative().optional(),
@@ -46,7 +46,7 @@ export const SeedStepSchema = z
     expiresInSec: z.number().positive().optional(),
     node: z.string().optional(),
     durationSec: z.number().positive().optional(),
-    useInvoice: z.boolean().optional(), // send_payment: trả invoice của `to` (new_invoice trước đó) thay vì keysend
+    useInvoice: z.boolean().optional(), // send_payment: pay `to`'s invoice (from an earlier new_invoice) instead of keysend
   })
   .superRefine((step, ctx) => {
     const require = (field: keyof typeof step, cond = step[field] === undefined) => {
@@ -54,7 +54,7 @@ export const SeedStepSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: [field],
-          message: `action "${step.action}" cần field "${String(field)}"`,
+          message: `action "${step.action}" requires field "${String(field)}"`,
         });
       }
     };
@@ -89,7 +89,7 @@ export const ExpectationSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["reason"],
-        message: `expect.reason chỉ được set khi expect.status === "failed"`,
+        message: `expect.reason may only be set when expect.status === "failed"`,
       });
     }
   });
@@ -110,7 +110,7 @@ export const ScenarioSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path,
-          message: `node "${name}" chưa khai báo trong nodes: [${scenario.nodes.join(", ")}]`,
+          message: `node "${name}" is not declared in nodes: [${scenario.nodes.join(", ")}]`,
         });
       }
     };
@@ -122,7 +122,7 @@ export const ScenarioSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["channels", i, "to"],
-          message: `channel không thể mở tới chính nó ("${ch.from}")`,
+          message: `a channel cannot connect a node to itself ("${ch.from}")`,
         });
       }
     });

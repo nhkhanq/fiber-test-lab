@@ -13,14 +13,14 @@ export interface ScenarioContext {
   scenario: Scenario;
   expectation: ExpectationResult | null;
   store: RunLogStore;
-  /** Host RPC endpoint theo node (cũng là WS endpoint — FNN dùng chung port) cho event-driven wait. */
+  /** Host RPC endpoint per node (also the WS endpoint — FNN shares the port) for event-driven waits. */
   endpoints: Record<string, string>;
-  /** payment_hash của send_payment cuối, hoặc null nếu payment lỗi đồng bộ (không sinh hash). */
+  /** payment_hash of the last send_payment, or null if the payment failed synchronously (no hash). */
   lastPaymentId: string | null;
-  /** Node đã gửi payment cuối — để poll get_payment đúng chỗ. */
+  /** The node that sent the last payment — so get_payment is polled on the right node. */
   lastPaymentFrom: string | null;
   call(node: string, method: string, params?: unknown[]): Promise<unknown>;
-  /** Mở event-driven watcher (subscribe_store_changes) trên 1 node — chờ payment bằng event thay vì poll. */
+  /** Open an event-driven watcher (subscribe_store_changes) on a node — wait on events instead of polling. */
   watchPayments(node: string): Promise<PaymentWatcher>;
   reset(): Promise<void>;
 }
@@ -30,8 +30,8 @@ function lastSendPayment(store: RunLogStore): StepRecord | undefined {
 }
 
 /**
- * up + seed 1 scenario rồi trả về context để test-kit assert (không teardown — gọi `ctx.reset()` khi xong).
- * Dùng chung `runScenario` với `fiber-lab up`, nên mọi RPC vẫn ghi vào run-log.
+ * up + seed a scenario and return a context for the test-kit to assert on (no teardown — call `ctx.reset()` when done).
+ * Shares `runScenario` with `fiber-lab up`, so every RPC is still logged to the run-log.
  */
 export async function setupScenario(
   name: string,

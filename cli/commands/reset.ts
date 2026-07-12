@@ -5,9 +5,9 @@ import { reset as resetRun, resetAll } from "../../lib/docker/orchestrator";
 export function registerResetCommand(program: Command): void {
   program
     .command("reset [run-id]")
-    .description("Teardown 1 run (theo run-id) hoặc tất cả (--all / không tham số)")
-    .option("--all", "Dọn tất cả run của Test Lab")
-    .option("--json", "In JSON")
+    .description("Tear down one run (by run-id) or all runs (--all / no argument)")
+    .option("--all", "Clean up every Test Lab run")
+    .option("--json", "Print JSON")
     .action(async (runId: string | undefined, opts: { all?: boolean; json?: boolean }) => {
       const config = loadConfig();
 
@@ -25,10 +25,10 @@ export function registerResetCommand(program: Command): void {
       }
 
       if (cleaned.length === 0) {
-        console.log("Không có run nào để dọn.");
+        console.log("No runs to clean up.");
         return;
       }
-      console.log(`Đã dọn ${cleaned.length} run:`);
+      console.log(`Cleaned up ${cleaned.length} run(s):`);
       for (const id of cleaned) console.log(`  ${id}`);
     });
 }

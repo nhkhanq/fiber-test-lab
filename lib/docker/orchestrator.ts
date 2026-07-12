@@ -42,7 +42,6 @@ function docker(args: string[]): Promise<DockerResult> {
   });
 }
 
-/** run-id: lowercase alnum, an toàn cho tên network/container/project của docker. */
 function newRunId(): string {
   return Date.now().toString(36) + randomBytes(3).toString("hex");
 }
@@ -62,7 +61,6 @@ function composeFilePath(runId: string): string {
   return join(WORK_DIR, `${runId}.yml`);
 }
 
-/** Sinh run-id chưa trùng network/run-log đang tồn tại (BR-ISO-004). */
 async function uniqueRunId(config: GlobalConfig): Promise<string> {
   for (let i = 0; i < 5; i++) {
     const id = newRunId();
@@ -70,20 +68,15 @@ async function uniqueRunId(config: GlobalConfig): Promise<string> {
       return id;
     }
   }
-  throw new Error("Không sinh được run-id duy nhất sau 5 lần thử");
+  throw new Error("Could not generate a unique run-id after 5 attempts");
 }
 
-/**
- * Dọn sạch mọi tài nguyên docker của 1 project (BR-CLN-001/002). Idempotent —
- * gọi trên run không tồn tại là no-op. Bọc lỗi để luôn cố dọn hết các bước sau.
- */
 export async function teardown(project: string, network: string, composeFile?: string): Promise<void> {
   const downArgs = ["compose", "-p", project];
   if (composeFile && (await fileExists(composeFile))) downArgs.push("-f", composeFile);
   downArgs.push("down", "-v", "--remove-orphans", "--timeout", "10");
   await docker(downArgs);
 
-  // Fallback: ép xoá container còn sót theo nhãn compose project (kể cả khi up lỗi giữa chừng).
   const ps = await docker(["ps", "-aq", "--filter", `label=com.docker.compose.project=${project}`]);
   const ids = ps.stdout.split(/\s+/).filter(Boolean);
   if (ids.length) await docker(["rm", "-f", ...ids]);
@@ -91,7 +84,6 @@ export async function teardown(project: string, network: string, composeFile?: s
   if (await networkExists(network)) await docker(["network", "rm", network]);
 }
 
-/** Ghi compose YAML ra file work rồi `docker compose up -d`. Seam chung cho `up()` và test. */
 export async function composeUp(params: {
   project: string;
   composeFile: string;
@@ -115,7 +107,6 @@ export async function composeUp(params: {
   return docker(args);
 }
 
-/** Trạng thái healthcheck của 1 container ("healthy"/"unhealthy"/"starting"/"none"). */
 async function containerHealth(container: string): Promise<string> {
   const r = await docker([
     "inspect",
@@ -126,10 +117,6 @@ async function containerHealth(container: string): Promise<string> {
   return r.stdout.trim();
 }
 
-/**
- * Chờ mọi container READY qua healthcheck (BR-POL-001: poll node_info tới READY).
- * healthcheck FNN = curl node_info; CKB = get_tip_block_number. Timeout theo config.
- */
 export async function waitForReady(containers: string[], config: GlobalConfig): Promise<void> {
   const deadline = Date.now() + config.pollTimeoutMs;
   const pending = new Set(containers);
@@ -140,35 +127,31 @@ export async function waitForReady(containers: string[], config: GlobalConfig): 
     }
     if (pending.size === 0) return;
     if (Date.now() > deadline) {
-      throw new DockerError(`Timeout ${config.pollTimeoutMs}ms chờ READY: ${[...pending].join(", ")}`);
+      throw new DockerError(`Timed out after ${config.pollTimeoutMs}ms waiting for READY: ${[...pending].join(", ")}`);
     }
     await sleep(config.pollIntervalMs);
   }
 }
 
-/** `docker kill` — mô phỏng peer offline đột ngột (khác `stop`: không graceful shutdown). */
 export async function killNode(container: string): Promise<void> {
   const r = await docker(["kill", container]);
-  if (r.code !== 0) throw new DockerError(`docker kill thất bại (${container})`, r.stderr);
+  if (r.code !== 0) throw new DockerError(`docker kill failed (${container})`, r.stderr);
 }
 
-/** `docker start` container đã kill, rồi chờ healthy lại (BR-POL-001) trước khi seed tiếp tục dùng node. */
 export async function startNode(container: string, config: GlobalConfig): Promise<void> {
   const r = await docker(["start", container]);
-  if (r.code !== 0) throw new DockerError(`docker start thất bại (${container})`, r.stderr);
+  if (r.code !== 0) throw new DockerError(`docker start failed (${container})`, r.stderr);
   await waitForReady([container], config);
 }
 
-/** `--keep` CLI hoặc `keepRunOnFailure` global config — giữ container lại để debug khi lỗi (BR-CLN-003). */
 export function shouldKeepOnFailure(config: GlobalConfig, keepFlag?: boolean): boolean {
   return Boolean(keepFlag) || config.keepRunOnFailure;
 }
 
 export function printKeepGuidance(runId: string): void {
-  console.error(`Giữ lại run ${runId} để debug — xem \`fiber-lab logs ${runId}\` hoặc dọn bằng \`fiber-lab reset ${runId}\`.`);
+  console.error(`Keeping run ${runId} for debugging — see \`fiber-lab logs ${runId}\` or clean up with \`fiber-lab reset ${runId}\`.`);
 }
 
-/** Host endpoint (port map tạm) của 1 container theo cổng nội bộ, hoặc null nếu chưa map. */
 async function hostEndpoint(container: string, port: number): Promise<string | null> {
   const r = await docker(["port", container, String(port)]);
   const hostPort = r.stdout.trim().split("\n")[0]?.match(/:(\d+)$/)?.[1];
@@ -181,16 +164,10 @@ export interface UpResult {
   network: string;
   nodes: string[];
   endpoints: Record<string, string>;
-  /** Host endpoint tạm của CKB RPC — cho seeder mint UDT qua CCC. */
   ckbEndpoint: string | null;
   composeFile: string;
 }
 
-/**
- * Dựng topology cho scenario: sinh run-id + compose động → `docker compose up -d --build` → chờ READY.
- * Lỗi giữa chừng → tự teardown (trừ `--keep`/`keepRunOnFailure`, BR-CLN-001/003). Không chạy seed —
- * đó là việc của caller (`cli up` gọi tiếp `runSeed` rồi mới finish run-log).
- */
 export async function up(
   scenario: Scenario,
   config: GlobalConfig,
@@ -209,7 +186,6 @@ export async function up(
   const store = RunLogStore.create({ runId, scenario: scenario.name, network, nodes });
   await store.save();
 
-  // Sinh base dir per-node (config.yml + keys) TRƯỚC khi up — volume mount cần file sẵn.
   await generateNodeConfigs(scenario, runId);
 
   const result = await composeUp({
@@ -224,10 +200,9 @@ export async function up(
     await store.save();
     if (shouldKeepOnFailure(config, opts.keep)) printKeepGuidance(runId);
     else await teardown(project.name, network, composeFile);
-    throw new DockerError(`docker compose up thất bại (run ${runId})`, result.stderr);
+    throw new DockerError(`docker compose up failed (run ${runId})`, result.stderr);
   }
 
-  // Chờ CKB + mọi node FNN READY (BR-POL-001) — không seed trước khi READY.
   try {
     await waitForReady(
       Object.keys(project.services).map((n) => containerName(config, runId, n)),
@@ -242,7 +217,6 @@ export async function up(
     throw e;
   }
 
-  // Resolve host port map cho từng node FNN → endpoints cho seeder/test-kit.
   const endpoints: Record<string, string> = {};
   for (const node of scenario.nodes) {
     const ep = await hostEndpoint(containerName(config, runId, node), FNN_RPC_PORT);
@@ -254,8 +228,6 @@ export async function up(
   }
   const ckbEndpoint = await hostEndpoint(containerName(config, runId, CKB_SERVICE), CKB_RPC_PORT);
 
-  // Không finish("completed") ở đây — topology đã READY nhưng seed (nếu có) chưa chạy;
-  // caller (CLI `up`) quyết định khi nào run thực sự xong.
   await store.save();
 
   return {
@@ -269,7 +241,6 @@ export async function up(
   };
 }
 
-/** Reset 1 run: teardown docker + đánh dấu run-log `status: reset` (giữ file). */
 export async function reset(runId: string, config: GlobalConfig): Promise<void> {
   const network = networkName(config, runId);
   await teardown(network, network, composeFilePath(runId)); // project name == network
@@ -279,7 +250,6 @@ export async function reset(runId: string, config: GlobalConfig): Promise<void> 
   await rm(composeFilePath(runId), { force: true });
 }
 
-/** Reset tất cả run: gộp run-id từ run-log + network `<prefix>_*` còn sót. */
 export async function resetAll(config: GlobalConfig): Promise<string[]> {
   const ids = new Set<string>();
 

@@ -6,7 +6,7 @@ export function registerListCommand(program: Command): void {
   program
     .command("list")
     .description("List all scenarios and runs")
-    .option("--json", "In JSON")
+    .option("--json", "Print JSON")
     .action(async (opts: { json?: boolean }) => {
       const [scenarios, runs] = await Promise.all([listScenarios(), listRuns()]);
 

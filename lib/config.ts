@@ -6,7 +6,6 @@ export const GlobalConfigSchema = z.object({
   pollTimeoutMs: z.number().int().positive().default(60_000),
   dockerNetworkPrefix: z.string().min(1).default("flab"),
   fnnVersion: z.string().min(1),
-  /** Mức log. */
   logLevel: z.enum(["debug", "info", "warn", "error"]).default("info"),
   keepRunOnFailure: z.boolean().default(false),
   maxNodesPerScenario: z.number().int().positive().default(3),

@@ -11,7 +11,7 @@ function countSuccessfulPayments(steps: { action: string; result: unknown }[]): 
 
 describe("complex scenarios", () => {
   it(
-    "round-trip: thanh toán hai chiều A→B rồi B→A đều thành công",
+    "round-trip: bidirectional payments A->B then B->A both succeed",
     async () => {
       const config = loadConfig();
       const { up, store, expectation } = await runScenario("round-trip", config);
@@ -26,7 +26,7 @@ describe("complex scenarios", () => {
   );
 
   it(
-    "channel-drain: 4 payment thành công rồi cạn outbound → insufficient_outbound",
+    "channel-drain: 4 payments succeed, then outbound is depleted -> insufficient_outbound",
     async () => {
       const config = loadConfig();
       const { up, store, expectation } = await runScenario("channel-drain", config);
@@ -42,7 +42,7 @@ describe("complex scenarios", () => {
   );
 
   it(
-    "two-hop-bottleneck: hop Bob→Charlie thiếu thanh khoản → no_route_found",
+    "two-hop-bottleneck: the Bob->Charlie hop lacks liquidity -> no_route_found",
     async () => {
       const config = loadConfig();
       const { up, expectation } = await runScenario("two-hop-bottleneck", config);

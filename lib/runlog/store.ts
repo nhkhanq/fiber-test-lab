@@ -46,7 +46,6 @@ export type StepRecord = z.infer<typeof StepRecordSchema>;
 export type NodeRecord = z.infer<typeof NodeRecordSchema>;
 export type RunStatus = z.infer<typeof RunStatusSchema>;
 
-/** Đường dẫn file run-log của 1 run-id. */
 export function runLogPath(runId: string): string {
   return join(RUNS_DIR, `${runId}.json`);
 }
@@ -131,12 +130,10 @@ export class RunLogStore {
     return RunLogSchema.parse(JSON.parse(raw));
   }
 
-  /** Nạp lại run-log đã lưu (VD sau `orchestrator.up`) thành store còn ghi tiếp được — dùng cho seed nối tiếp up. */
   static async resume(runId: string): Promise<RunLogStore> {
     return new RunLogStore(await RunLogStore.load(runId));
   }
 
-  /** Cập nhật status của 1 run-log đã lưu (VD "reset") mà KHÔNG xoá file — xem BR-CLN-002. */
   static async setStatus(runId: string, status: RunStatus, error?: string): Promise<void> {
     const log = await RunLogStore.load(runId);
     log.status = status;
@@ -146,7 +143,6 @@ export class RunLogStore {
   }
 }
 
-/** Mọi run-log hiện có (mới nhất trước), dùng cho `fiber-lab list`. Run-log hỏng → bỏ qua, không crash. */
 export async function listRuns(): Promise<RunLog[]> {
   const files = await readdir(RUNS_DIR).catch(() => [] as string[]);
   const runs: RunLog[] = [];
@@ -160,7 +156,7 @@ export async function listRuns(): Promise<RunLog[]> {
   return runs.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
 }
 
-/** Run mới nhất của 1 scenario còn sống (chưa reset) — dùng khi `fiber-lab seed` không có `--run`. */
+/** The scenario's most recent live (non-reset) run — used by `fiber-lab seed` when `--run` is omitted. */
 export async function latestRunForScenario(scenario: string): Promise<RunLog | null> {
   const runs = await listRuns();
   return runs.find((r) => r.scenario === scenario && r.status !== "reset") ?? null;

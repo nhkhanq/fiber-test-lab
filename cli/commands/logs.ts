@@ -17,7 +17,7 @@ function printSummary(log: RunLog): void {
   for (const s of log.steps) {
     console.log(`    ${s.action.padEnd(14)} ${JSON.stringify(s.input)} -> ${JSON.stringify(s.result)}`);
   }
-  console.log(`  rpc calls: ${log.rpcCalls.length} (dùng --rpc để xem chi tiết)`);
+  console.log(`  rpc calls: ${log.rpcCalls.length} (use --rpc for details)`);
 }
 
 function printRpc(log: RunLog): void {
@@ -33,13 +33,13 @@ function printRpc(log: RunLog): void {
 export function registerLogsCommand(program: Command): void {
   program
     .command("logs <run-id>")
-    .description("In run-log: tóm tắt step + status (mặc định), mọi RPC (--rpc), JSON raw (--json)")
-    .option("--json", "In nguyên run-log JSON")
-    .option("--rpc", "In đầy đủ mọi RPC call")
+    .description("Print a run-log: step/status summary (default), all RPCs (--rpc), or raw JSON (--json)")
+    .option("--json", "Print the full run-log JSON")
+    .option("--rpc", "Print every RPC call")
     .action(async (runId: string, opts: { json?: boolean; rpc?: boolean }) => {
       const log = await RunLogStore.load(runId).catch((error) => {
         if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-          throw new CliError(`Không tìm thấy run-log "${runId}" (trong .fiber-lab/runs/).`, EXIT_CODES.validation);
+          throw new CliError(`Run-log "${runId}" not found (in .fiber-lab/runs/).`, EXIT_CODES.validation);
         }
         throw error;
       });

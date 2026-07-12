@@ -22,11 +22,6 @@ export interface ScenarioRunResult {
   expectation: ExpectationResult | null;
 }
 
-/**
- * Dựng + seed + verify 1 scenario end-to-end, KHÔNG teardown khi thành công (caller quyết reset).
- * Seed lỗi runtime → teardown/keep + throw CliError(2). Expect lệch → trả về (không throw) để caller xử.
- * Dùng chung bởi `fiber-lab up` và test-kit/determinism.
- */
 export async function runScenario(
   name: string,
   config: GlobalConfig,

@@ -16,13 +16,13 @@ function endpointsOf(log: RunLog): Record<string, string> {
 export function registerSeedCommand(program: Command): void {
   program
     .command("seed <scenario>")
-    .description("Chạy lại phần seed của scenario trên 1 run đang chạy")
-    .option("--run <run-id>", "Run cụ thể (mặc định: run mới nhất của scenario)")
-    .option("--json", "In JSON")
+    .description("Re-run a scenario's seed steps against a running run")
+    .option("--run <run-id>", "Target a specific run (default: the scenario's latest run)")
+    .option("--json", "Print JSON")
     .action(async (scenarioName: string, opts: { run?: string; json?: boolean }) => {
       const config = loadConfig();
 
-      // Scenario sai schema → ScenarioValidationError bubble → exit 1.
+      // A bad schema throws ScenarioValidationError, which bubbles up to exit 1.
       const scenario = await loadScenarioByName(scenarioName);
 
       const log = opts.run
@@ -31,8 +31,8 @@ export function registerSeedCommand(program: Command): void {
       if (!log) {
         throw new CliError(
           opts.run
-            ? `Không tìm thấy run-log "${opts.run}".`
-            : `Không có run đang chạy cho scenario "${scenarioName}" — chạy \`fiber-lab up ${scenarioName}\` trước.`,
+            ? `Run-log "${opts.run}" not found.`
+            : `No running run for scenario "${scenarioName}" — run \`fiber-lab up ${scenarioName}\` first.`,
           EXIT_CODES.validation,
         );
       }
@@ -55,7 +55,7 @@ export function registerSeedCommand(program: Command): void {
       if (opts.json) {
         console.log(JSON.stringify(steps, null, 2));
       } else {
-        console.log(`Run ${log.runId} — ${steps.length} seed step:`);
+        console.log(`Run ${log.runId} — ${steps.length} seed step(s):`);
         for (const s of steps) console.log(`  ${s.action.padEnd(14)} ${JSON.stringify(s.input)} -> ${JSON.stringify(s.result)}`);
       }
     });

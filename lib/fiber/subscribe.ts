@@ -8,18 +8,13 @@ interface PaymentSessionEvent {
 }
 
 export interface PaymentWatcher {
-  /** Chờ payment `hash` đạt trạng thái terminal (Success/Failed) qua event, hoặc timeout. */
   wait(hash: string): Promise<{ status: string }>;
   close(): void;
 }
 
-/**
- * Mở subscribe_store_changes (WS) và đệm các PutPaymentSession — chờ event thay vì poll get_payment (E8-3).
- * Subscribe TRƯỚC khi gửi payment để không lỡ event; `wait` gộp cả trạng thái đã đệm lẫn event tương lai.
- */
 export function subscribePayments(endpoint: string, config: GlobalConfig): Promise<PaymentWatcher> {
   const ws = new WebSocket(endpoint.replace(/^http/, "ws"));
-  const latest = new Map<string, string>(); // payment_hash → status mới nhất
+  const latest = new Map<string, string>(); // payment_hash -> latest status
   const waiters = new Map<string, (status: string) => void>();
 
   ws.on("message", (data: WebSocket.RawData) => {
@@ -42,7 +37,7 @@ export function subscribePayments(endpoint: string, config: GlobalConfig): Promi
           return new Promise((res, rej) => {
             const timer = setTimeout(() => {
               waiters.delete(hash);
-              rej(new Error(`Timeout ${config.pollTimeoutMs}ms chờ event payment ${hash.slice(0, 12)}…`));
+              rej(new Error(`Timed out after ${config.pollTimeoutMs}ms waiting for the payment event ${hash.slice(0, 12)}…`));
             }, config.pollTimeoutMs);
             waiters.set(hash, (status) => {
               clearTimeout(timer);

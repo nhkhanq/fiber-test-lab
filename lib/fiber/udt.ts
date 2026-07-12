@@ -9,7 +9,6 @@ export interface UdtScript {
   args: string;
 }
 
-/** Client CCC trỏ vào CKB devnet của run, override secp256k1 dep_group (mặc định của CCC là testnet — sai). */
 function devnetClient(ckbEndpoint: string): ccc.ClientPublicTestnet {
   const base = new ccc.ClientPublicTestnet({ url: ckbEndpoint });
   return new ccc.ClientPublicTestnet({
@@ -36,10 +35,6 @@ function hex(key: string): string {
   return key.startsWith("0x") ? key : `0x${key}`;
 }
 
-/**
- * Mint `amount` đơn vị sUDT cho chủ của `minterPrivKey` (owner = lock hash của key đó) và chờ tx commit.
- * Trả về type script sUDT (JSON cho FNN `funding_udt_type_script`). Xem E8-4 / rpc-notebook §11.
- */
 export async function mintUdt(ckbEndpoint: string, minterPrivKey: string, amount: bigint): Promise<UdtScript> {
   const client = devnetClient(ckbEndpoint);
   const signer = new ccc.SignerCkbPrivateKey(client, hex(minterPrivKey));
