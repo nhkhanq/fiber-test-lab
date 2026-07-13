@@ -1,4 +1,3 @@
-#!/usr/bin/env bash
 set -euo pipefail
 
 DATA_DIR="${CKB_DATA_DIR:-/var/lib/ckb}"
