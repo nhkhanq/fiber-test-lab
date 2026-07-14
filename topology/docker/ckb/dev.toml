@@ -82,8 +82,6 @@ lock.code_hash = "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3
 lock.args = "0xc8328aabcd9b9e8e64fbc566c4385c3bdeb219d7"
 lock.hash_type = "type"
 
-# Pre-fund node accounts (privkey 0x1111.../0x2222.../0x3333...) — gán theo node index trong nodeConfig.ts.
-# Mỗi node có sẵn 10 tỷ CKB từ genesis ⇒ mở channel được ngay, không cần faucet runtime.
 [[genesis.issued_cells]]
 capacity = 10_000_000_000_00000000
 lock.code_hash = "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8"

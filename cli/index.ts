@@ -1,4 +1,3 @@
-#!/usr/bin/env -S npx tsx
 import { Command } from "commander";
 import pkg from "../package.json" with { type: "json" };
 import { exitCodeFor } from "../lib/errors";
