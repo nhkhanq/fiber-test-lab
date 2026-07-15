@@ -1,9 +1,8 @@
 # RPC Notebook (E0-4)
 
-> Sổ tay các RPC lõi của Fiber + params/response **thật** thu được khi thực hành tay trên
-> `fiber-demo-startup` (branch `demo-0.8`, commit `e512aec`). Đây là dữ liệu thật, không đoán —
+> Sổ tay các RPC lõi của Fiber + params/response **thật** thu được khi thực hành tay
+> (curl trực tiếp vào RPC của FNN node đang chạy). Đây là dữ liệu thật, không đoán —
 > dùng làm cơ sở cho `lib/fiber/client.ts` (E2-3) và seeder (E3-6).
-> Chữ ký RPC trích từ code chạy thật: `app/src/lib/fiber/rpc.ts` trong demo-startup.
 
 ## Môi trường
 
@@ -144,7 +143,7 @@ Kịch bản: kênh alice→bob, alice tiêu được 301 CKB, trả invoice 400
 
 - `graph_channels` params `[{}]` → `{ channels: [{ node1, node2, ... }] }`; `graph_nodes` → `{ nodes: [{ node_id, node_name }] }`. Đây là **graph mà node đó đã học qua gossip** (khác `list_channels` = kênh của chính node).
 - Node chỉ tự biết kênh của MÌNH ngay; kênh của node khác (vd alice học `bob↔charlie`) phải chờ **gossip lan**.
-- **Gossip interval mặc định FNN = 60s** (`--fiber-gossip-network-maintenance-interval-ms`, default 60000; store 20000). Không có bootnode như demo-startup ⇒ alice học `bob→charlie` mất >60s → `send_payment` sớm fail `no path found`. **Fix:** set env `FIBER_GOSSIP_NETWORK_MAINTENANCE_INTERVAL_MS`/`..._STORE_...` = 2000 trong compose ⇒ lan ~vài giây, multi-hop tất định.
+- **Gossip interval mặc định FNN = 60s** (`--fiber-gossip-network-maintenance-interval-ms`, default 60000; store 20000). Không có bootnode riêng cho gossip bootstrap ⇒ alice học `bob→charlie` mất >60s → `send_payment` sớm fail `no path found`. **Fix:** set env `FIBER_GOSSIP_NETWORK_MAINTENANCE_INTERVAL_MS`/`..._STORE_...` = 2000 trong compose ⇒ lan ~vài giây, multi-hop tất định.
 - `send_payment` multi-hop giống direct (keysend + target_pubkey) — FNN tự build route nếu graph có path.
 - **fee phân biệt hop:** kênh trực tiếp `fee: 0x0`; qua 1 hop trung gian (bob) `fee: 0x989680` = 10,000,000 shannon = 0.1 CKB (= 0.1% × 100 CKB, khớp `tlc_fee_proportional_millionths: 0x3e8`). `get_payment` KHÔNG trả route/hop count — chỉ có `fee` làm bằng chứng runtime có hop trung gian.
 
@@ -157,7 +156,7 @@ Kịch bản: kênh alice→bob, alice tiêu được 301 CKB, trả invoice 400
 
 ## 11. Multi-asset UDT (E8-4) — sUDT/RUSD
 
-- **Script simple_udt** trên devnet reimplement: code_hash = ckb-blake2b của binary `/fiber-scripts/simple_udt` = `0xe1e354d6d643ad42724d40967e334984534e0367405c5ae42a9d7d63d77df419` (hash_type **data**) — TRÙNG demo-startup ⇒ cùng nguồn script. cell_dep = genesis tx[0] out[8]; secp256k1 dep_group = genesis tx[1] out[0]. Tất định theo dev.toml + CKB v0.207.0.
+- **Script simple_udt** trên devnet reimplement: code_hash = ckb-blake2b của binary `/fiber-scripts/simple_udt` = `0xe1e354d6d643ad42724d40967e334984534e0367405c5ae42a9d7d63d77df419` (hash_type **data**). cell_dep = genesis tx[0] out[8]; secp256k1 dep_group = genesis tx[1] out[0]. Tất định theo dev.toml + CKB v0.207.0.
 - **Không có UDT trong genesis** (`issued_cells` chỉ CKB) ⇒ phải **mint runtime**. `mintUdt` (CCC): output cell `{lock: node, type: simple_udt{args: ownerLockHash}, data: amount u128 LE}`; owner mode = lock owner có mặt trong inputs (node tự ký). Cần override secp256k1 dep_group của client CCC (mặc định testnet — sai), gửi `passthrough` (simple_udt không phải well-known script).
 - **FNN nhận UDT** qua `ckb.udt_whitelist: [{name, script:{code_hash,hash_type:data,args:"0x.*"}, cell_deps, auto_accept_amount}]` (args regex khớp mọi owner).
 - **open_channel UDT:** thêm `funding_udt_type_script` = script sUDT; `funding_amount` = **đơn vị token** (hex, KHÔNG ×1e8). `list_channels` → `local_balance` cũng là đơn vị token. **send_payment UDT:** thêm `udt_type_script`; `amount` = đơn vị token. Verify: kênh 10000 RUSD, trả 100 → Success, fee 0.
