@@ -8,50 +8,50 @@ tags: [cli, commander, commands]
 # CLI Specification — fiber-lab
 
 
-## Quy ước chung
+## General conventions
 
-- Mọi lệnh in kết quả dạng người đọc được ra stdout; thêm `--json` để in JSON máy đọc được (cho CI).
-- Exit code: `0` thành công, `1` lỗi cấu hình/validation, `2` lỗi runtime (docker/RPC), `3` expectation không khớp.
-- Mọi lệnh đọc `fiber-lab.config.ts` (global config) trừ khi override bằng flag.
+- Every command prints a human-readable result to stdout; add `--json` for machine-readable JSON (for CI).
+- Exit code: `0` success, `1` config/validation error, `2` runtime error (docker/RPC), `3` expectation mismatch.
+- Every command reads `fiber-lab.config.ts` (global config) unless overridden by a flag.
 
-## Lệnh
+## Commands
 
 ### `fiber-lab up <scenario> [--json] [--keep]`
-Dựng topology cho kịch bản.
-- `<scenario>` — tên file trong `topology/scenarios/` (không cần đuôi `.yaml`)
-- `--keep` — không tự teardown khi lỗi (để debug)
-- **Làm gì:** validate YAML → sinh run-id → sinh compose động → `docker compose up` → chờ node ready → genesis pre-fund (không faucet runtime) → mở channel theo `channels` → chờ channel READY.
-- **Output:** in `run-id` (dùng cho các lệnh sau). `--json` → `{ runId, network, nodes: [...] }`.
-- **Lỗi:** schema sai → exit 1; docker/RPC lỗi → exit 2, run-log ghi lại nguyên nhân.
+Build the topology for a scenario.
+- `<scenario>` — a file name under `topology/scenarios/` (no `.yaml` extension needed)
+- `--keep` — do not tear down automatically on error (for debugging)
+- **What it does:** validate the YAML → generate a run-id → generate dynamic compose → `docker compose up` → wait for nodes to be ready → genesis pre-fund (no runtime faucet) → open channels per `channels` → wait for channels to be READY.
+- **Output:** prints the `run-id` (used by later commands). `--json` → `{ runId, network, nodes: [...] }`.
+- **Errors:** bad schema → exit 1; docker/RPC error → exit 2, the run-log records the cause.
 
 ### `fiber-lab seed <scenario> [--run <run-id>] [--json]`
-Chạy phần `seed` của kịch bản trên 1 run đang chạy.
-- Nếu không có `--run` → dùng run mới nhất của scenario đó.
-- **Làm gì:** thực thi tuần tự `SeedStep[]` (send_payment, new_invoice, kill_node, wait...), ghi từng bước vào run-log.
-- **Output:** kết quả từng step. `--json` → mảng `StepRecord`.
+Run the scenario's `seed` steps against a running run.
+- Without `--run` → uses the most recent run of that scenario.
+- **What it does:** executes `SeedStep[]` sequentially (send_payment, new_invoice, kill_node, wait...), recording each step to the run-log.
+- **Output:** the result of each step. `--json` → an array of `StepRecord`.
 
-> Ghi chú: `up` có thể tự chạy seed luôn nếu scenario có phần `seed`. `seed` riêng dùng khi muốn chạy lại/điều khiển thủ công.
+> Note: `up` can run the seed automatically if the scenario has a `seed` section. The standalone `seed` command is for re-running or manually controlling it.
 
 ### `fiber-lab reset [run-id] [--all]`
-Teardown và dọn dẹp.
-- `reset <run-id>` — dọn đúng 1 run (docker down + xoá network + xoá port map).
-- `reset --all` (hoặc `reset` không tham số) — dọn TẤT CẢ run của Test Lab.
-- **Output:** danh sách run đã dọn.
-- **Đảm bảo:** không để lại container/network rác — kể cả khi `up` trước đó bị lỗi giữa chừng.
+Teardown and cleanup.
+- `reset <run-id>` — cleans up exactly one run (docker down + remove network + remove port map).
+- `reset --all` (or `reset` with no argument) — cleans up EVERY Test Lab run.
+- **Output:** the list of runs that were cleaned up.
+- **Guarantee:** no leftover containers/networks — even if a prior `up` failed partway through.
 
 ### `fiber-lab logs <run-id> [--json] [--rpc]`
-In run-log.
-- Mặc định: tóm tắt các step + status.
-- `--rpc` — in đầy đủ mọi RPC call (method/params/response/error thô) — để debug sâu.
-- `--json` — in nguyên file run-log JSON.
+Print the run-log.
+- Default: a summary of steps + status.
+- `--rpc` — print every raw RPC call (method/params/response/error) in full — for deep debugging.
+- `--json` — print the raw run-log JSON file.
 
 ### `fiber-lab list [--json]`
-- Liệt kê các scenario có sẵn (đọc `topology/scenarios/`) kèm `description`.
-- Liệt kê các run đang chạy (đọc `.fiber-lab/runs/`) kèm status.
+- Lists the available scenarios (reading `topology/scenarios/`) with their `description`.
+- Lists the currently running runs (reading `.fiber-lab/runs/`) with their status.
 
-## Dùng chung với test-kit (Vitest)
+## Shared use with test-kit (Vitest)
 
-test-kit không gọi CLI qua shell — import trực tiếp `lib/` để lấy context 1 run:
+test-kit does not call the CLI through a shell — it imports `lib/` directly to get a run's context:
 ```typescript
 import { setupScenario } from "fiber-test-lab/test-kit"
 import { expectPaymentFails } from "fiber-test-lab/test-kit"
@@ -60,4 +60,4 @@ const ctx = await setupScenario("insufficient-capacity")   // ~ up + seed
 await expectPaymentFails(ctx, ctx.lastPaymentId, "insufficient_outbound")
 await ctx.reset()
 ```
-`ctx` bao gồm: `runId`, hàm gọi RPC theo tên node, `lastPaymentId`, `reset()`.
+`ctx` includes: `runId`, a function to call RPC by node name, `lastPaymentId`, `reset()`.

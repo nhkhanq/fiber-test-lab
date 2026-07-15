@@ -6,50 +6,50 @@ last_updated: 2026-07-04
 
 # Fiber Test Lab — Context Index
 
-Đây là Single Source of Truth cho toàn bộ project. Claude Code nên đọc file này trước tiên.
+This is the Single Source of Truth for the whole project. Claude Code should read this file first.
 
-## Dự án là gì?
+## What is this project?
 
-**Fiber Test Lab** là một môi trường test **hoàn toàn local** cho Fiber Network (CKB blockchain), dựng bằng 1 lệnh, cho phép developer tái tạo **lặp lại được** và **kiểm soát được** các tình huống thanh toán / routing thường gặp (kênh trực tiếp, route multi-hop, thiếu capacity, invoice hết hạn, peer offline) — kèm CLI để dựng/seed/reset từng kịch bản, và một thư viện assertion (`test-kit`) để viết integration test tự động.
+**Fiber Test Lab** is a **fully local** test environment for Fiber Network (the CKB blockchain), built with a single command, that lets developers **reproduce** and **control** common payment/routing scenarios (a direct channel, a multi-hop route, insufficient capacity, an expired invoice, a peer going offline) — with a CLI to build/seed/reset each scenario, and an assertion library (`test-kit`) for writing automated integration tests.
 
-Developer build app trên Fiber (ví, merchant gateway, game, agent...) hiện **không thể viết test tự động** cho logic thanh toán của họ, vì cách duy nhất để chạm vào các tình huống lỗi payment-channel là tạo chúng thật trên testnet công cộng — chậm, chia sẻ, không lặp lại được, không ép được lỗi theo ý muốn. Fiber Test Lab giải quyết đúng vấn đề đó.
+Developers building apps on Fiber (wallets, merchant gateways, games, agents...) currently **cannot write automated tests** for their payment logic, because the only way to hit payment-channel failure scenarios is to create them for real on a public testnet — slow, shared, non-reproducible, and impossible to force on demand. Fiber Test Lab solves exactly that problem.
 
-> **Lưu ý naming & định vị:** đây KHÔNG phải là một Fiber node mới, KHÔNG phải wallet, KHÔNG phải app end-user. Đây là **developer tooling / local testing environment** — khớp trực tiếp ví dụ *"Local testing environments, developer CLIs, and test suites for common Fiber payment and routing scenarios"* trong **Category 2** của hackathon.
+> **Naming and positioning note:** this is NOT a new Fiber node, NOT a wallet, NOT an end-user app. It is **developer tooling / a local testing environment** — it directly matches the example *"Local testing environments, developer CLIs, and test suites for common Fiber payment and routing scenarios"* under **Category 2** of the hackathon.
 
-Dự án được xây cho **Gone in 60ms: Fiber Network Infrastructure Hackathon** (1–15 July 2026), category: **Node, Routing, Cross-Chain, and Diagnostics Infrastructure**.
+Built for the **Gone in 60ms: Fiber Network Infrastructure Hackathon** (1–15 July 2026), category: **Node, Routing, Cross-Chain, and Diagnostics Infrastructure**.
 
 
-## Cây context
+## Context tree
 
-| File | Nội dung |
+| File | Content |
 |------|----------|
-| `business-context/project-vision.md` | Vision, vấn đề, scope, out-of-scope, trade-offs |
-| `architecture/system-design.md` | **Kiến trúc chi tiết** — tech stack, topology, data flow, run-id isolation, cấu trúc repo, config 2 tầng. Đọc kỹ nhất. |
-| `data-dictionary/scenario-schema.md` | Schema file kịch bản YAML + schema JSON run-log (thay cho database-schema) |
-| `api/cli-spec.md` | Đặc tả CLI đầy đủ (lệnh, tham số, output, exit code) — thay cho REST API |
-| `business-rules/scenario-rules.md` | Luật chạy kịch bản, polling, isolation, cleanup |
-| `glossary/fiber-terms.md` | Thuật ngữ Fiber + Test Lab |
-| `user-stories/developer-flows.md` | User stories từ góc nhìn developer dùng Test Lab |
-| `processes/decisions-log.md` | Quyết định kiến trúc/nghiệp vụ đã được human chốt |
-| `processes/definition-of-done.md` | DoD + checklist tự verify cuối mỗi session |
+| `business-context/project-vision.md` | Vision, the problem, scope, out-of-scope, trade-offs |
+| `architecture/system-design.md` | **Detailed architecture** — tech stack, topology, data flow, run-id isolation, repo layout, two-tier config. Read most carefully. |
+| `data-dictionary/scenario-schema.md` | The scenario YAML schema + the run-log JSON schema (in place of a database schema) |
+| `api/cli-spec.md` | Full CLI specification (commands, parameters, output, exit codes) — in place of a REST API |
+| `business-rules/scenario-rules.md` | Rules for running scenarios, polling, isolation, cleanup |
+| `glossary/fiber-terms.md` | Fiber and Test Lab terminology |
+| `user-stories/developer-flows.md` | User stories from the perspective of a developer using Test Lab |
+| `processes/decisions-log.md` | Architecture/business decisions confirmed by a human |
+| `processes/definition-of-done.md` | Definition of Done + a self-verification checklist for the end of each session |
 
 ## Repo layout
 
 ```
 fiber-test-lab/
 ├── topology/          — docker-compose + scenario YAML files
-├── cli/               — fiber-lab CLI (commander)
-├── test-kit/          — assertion helpers cho Vitest
-├── lib/               — fiber RPC client wrapper, docker orchestration, run-log
-├── fiber-lab.config.ts — global config (tầng 2 settings)
+├── cli/               — the fiber-lab CLI (commander)
+├── test-kit/          — assertion helpers for Vitest
+├── lib/               — the Fiber RPC client wrapper, Docker orchestration, run-log
+├── fiber-lab.config.ts — global config (tier-2 settings)
 └── docs/              — scenario-catalog.md, README
 ```
 
-## Quy ước code
+## Code conventions
 
-- TypeScript strict mode toàn bộ
-- Tên hàm: camelCase. Tên type/interface: PascalCase
-- CLI command handler tách khỏi business logic (handler mỏng, logic trong `lib/`)
-- Mọi input từ file YAML phải validate qua `zod` TRƯỚC khi dùng — fail fast với message rõ ràng
-- Không hardcode port/tên container — sinh từ run-id (xem system-design)
-- Mọi thao tác docker phải cleanup được qua `fiber-lab reset` — không để lại rác
+- TypeScript strict mode throughout
+- Function names: camelCase. Type/interface names: PascalCase
+- CLI command handlers are separated from business logic (thin handlers, logic lives in `lib/`)
+- Every input coming from a YAML file must be validated with `zod` BEFORE use — fail fast with a clear message
+- Never hardcode ports or container names — derive them from the run-id (see system-design)
+- Every Docker operation must be cleanable via `fiber-lab reset` — no leftover resources

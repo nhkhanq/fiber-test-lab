@@ -7,37 +7,37 @@ tags: [dod, checklist, quality]
 
 # Definition of Done — Fiber Test Lab
 
-## DoD cho 1 feature/scenario
+## DoD for one feature/scenario
 
-Một scenario được coi là "done" khi:
-- [ ] File YAML validate qua `zod` không lỗi
-- [ ] `fiber-lab up <scenario>` dựng thành công, node đạt READY
-- [ ] `fiber-lab seed` chạy hết các step, ghi run-log đầy đủ
-- [ ] Kết quả khớp `expect` một cách **deterministic** (chạy 3 lần liên tiếp giống nhau)
-- [ ] `fiber-lab reset` dọn sạch, không sót container/network
-- [ ] Có mô tả trong `docs/scenario-catalog.md` (dùng để làm gì, giới hạn đã biết)
+A scenario is considered "done" when:
+- [ ] The YAML file validates through `zod` with no errors
+- [ ] `fiber-lab up <scenario>` builds successfully, nodes reach READY
+- [ ] `fiber-lab seed` runs every step, writing the full run-log
+- [ ] The result matches `expect` **deterministically** (3 consecutive runs give the same result)
+- [ ] `fiber-lab reset` cleans up completely, no leftover containers/networks
+- [ ] It's described in `docs/scenario-catalog.md` (what it's for, known limitations)
 
-## DoD cho `test-kit`
+## DoD for `test-kit`
 
-- [ ] `expectPaymentSucceeds` / `expectPaymentFails` / `expectChannelState` hoạt động
-- [ ] Poll có timeout, khi fail đính kèm run-log để debug
-- [ ] Ít nhất 1 file test mẫu trong `test-kit/examples/` chạy pass với Vitest
-- [ ] Test mẫu chạy được từ trạng thái sạch (`git clone` → `npm install` → chạy được, có hướng dẫn prerequisite)
+- [ ] `expectPaymentSucceeds` / `expectPaymentFails` / `expectChannelState` all work
+- [ ] Polling has a timeout, and a failure attaches the run-log for debugging
+- [ ] At least one example test file in `test-kit/examples/` passes under Vitest
+- [ ] The example test runs from a clean state (`git clone` -> `npm install` -> runs, with prerequisites documented)
 
-## DoD cho toàn dự án (submission)
+## DoD for the whole project (submission)
 
-- [ ] README: vấn đề → giải pháp → cách chạy (prerequisite: Docker, offckb, FNN version)
-- [ ] 3 scenario must-have chạy được end-to-end
-- [ ] `docs/scenario-catalog.md` liệt kê mọi scenario + giới hạn + pinned versions
-- [ ] Video demo (3–5 phút): dựng scenario → chạy test pass/fail → xem run-log → reset
-- [ ] Repo open-source, có LICENSE (MIT)
-- [ ] Document rõ trade-offs: devnet≠mainnet, peer-offline giả bằng docker kill, bảo trì theo version FNN
+- [ ] README: problem -> solution -> how to run (prerequisites: Docker, offckb, FNN version)
+- [ ] All 3 must-have scenarios run end-to-end
+- [ ] `docs/scenario-catalog.md` lists every scenario + its limitations + pinned versions
+- [ ] A demo video (3-5 minutes): build a scenario -> run a passing/failing test -> view the run-log -> reset
+- [ ] The repo is open source, with a LICENSE (MIT)
+- [ ] Trade-offs are clearly documented: devnet ≠ mainnet, peer-offline simulated with docker kill, maintenance tied to the FNN version
 
-## Checklist tự-verify cuối mỗi coding session
+## Self-verification checklist at the end of every coding session
 
-- [ ] Code mới có validate input YAML qua zod chưa?
-- [ ] Có thao tác docker nào không cleanup được qua reset không?
-- [ ] Có hardcode port/tên container thay vì sinh từ run-id không?
-- [ ] Run-log có ghi đủ RPC call (kể cả thành công) để debug không?
-- [ ] Có làm flaky test không (thiếu chờ READY)? — nếu có, coi là bug phải sửa.
-- [ ] Cập nhật `decisions-log.md` nếu có quyết định mới được human chốt?
+- [ ] Does any new code validate YAML input through zod?
+- [ ] Is there any Docker operation that `reset` cannot clean up?
+- [ ] Is any port/container name hardcoded instead of derived from the run-id?
+- [ ] Does the run-log record every RPC call (including successes) for debugging?
+- [ ] Did this introduce a flaky test (a missing wait for READY)? — if so, treat it as a bug to fix.
+- [ ] Update `decisions-log.md` if a new decision was confirmed by a human?

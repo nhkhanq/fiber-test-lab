@@ -8,107 +8,107 @@ tags: [fiber, ckb, payment-channel, testing]
 
 # Glossary — Fiber Test Lab
 
-## Thuật ngữ Fiber (nền tảng)
+## Fiber terms (foundational)
 
 ## Fiber Network
-Mạng payment channel P2P trên Nervos CKB. Tương tự Bitcoin Lightning nhưng multi-asset (CKB, RUSD, UDT).
+A P2P payment-channel network on Nervos CKB. Similar to Bitcoin Lightning but multi-asset (CKB, RUSD, UDT).
 
 ## FNN (Fiber Network Node)
-Reference implementation của Fiber protocol (Rust). Test Lab chạy nhiều FNN binary THẬT trong các container. Release gồm 2 binary: `fnn` (HTTP RPC + node maintenance) và `fnn-cli` (CLI quản lý). Source: github.com/nervosnetwork/fiber.
+The reference implementation of the Fiber protocol (Rust). Test Lab runs several REAL FNN binaries in containers. A release includes 2 binaries: `fnn` (HTTP RPC + node maintenance) and `fnn-cli` (a management CLI). Source: github.com/nervosnetwork/fiber.
 
-## fnn-cli (cấu trúc subcommand)
-CLI quản lý node, dùng dạng **subcommand** (đã verify từ doc):
-- `fnn-cli info` — thông tin node
-- `fnn-cli peer list_peers` — danh sách peer
-- `fnn-cli channel list_channels` — danh sách channel
-(KHÔNG phải lệnh phẳng kiểu `fnn-cli open_channel`.)
+## fnn-cli (subcommand structure)
+A node-management CLI using a **subcommand** style (verified from the docs):
+- `fnn-cli info` — node info
+- `fnn-cli peer list_peers` — the peer list
+- `fnn-cli channel list_channels` — the channel list
+(NOT flat commands like `fnn-cli open_channel`.)
 
 ## fiber-demo-startup
-Repo chính thức (github.com/HappySonnyDev/fiber-demo-startup, branch `demo-0.8`) — docker-compose dựng CKB dev chain local + nhiều Fiber node (1 bootnode + 3 node + transfer container cấp tiền) + app Next.js demo. **Test Lab build ON TOP repo này** (fork hạ tầng docker đã chứng minh, thêm lớp scenario/seeder/test-kit/CLI). demo-startup là "interactive learning", Test Lab biến nó thành "automated testing".
+The official repo (github.com/HappySonnyDev/fiber-demo-startup, branch `demo-0.8`) — a docker-compose that builds a local CKB dev chain + several Fiber nodes (1 bootnode + 3 nodes + a funding transfer container) + a Next.js demo app. **Test Lab builds ON TOP of this repo** (forking its proven Docker infrastructure, adding a scenario/seeder/test-kit/CLI layer). demo-startup is "interactive learning"; Test Lab turns it into "automated testing".
 
 ## Payment Channel
-Quan hệ trực tiếp 2 node. Mở = khoá CKB on-chain vào Funding Cell (multisig). Giao dịch off-chain. Đóng = settle on-chain.
+A direct relationship between two nodes. Opening it = locking CKB on-chain into a Funding Cell (multisig). Transactions happen off-chain. Closing it = settling on-chain.
 
 ## Capacity (inbound / outbound)
-Capacity channel chia theo CHIỀU, không phải 1 số chung:
-- **Outbound** = có thể GỬI đi
-- **Inbound** = có thể NHẬN về
-Mỗi lần trả tiền, outbound giảm/inbound tăng ở phía người trả. Mỗi bên reserve tối thiểu **99 CKB** (không dùng để payment).
+Channel capacity is split by DIRECTION, not a single number:
+- **Outbound** = what can be SENT
+- **Inbound** = what can be RECEIVED
+Each payment decreases outbound / increases inbound on the payer's side. Each side reserves a minimum of **99 CKB** (not usable for payments).
 
 ## HTLC (Hash Time-Locked Contract)
-Cơ chế bảo mật multi-hop: hoặc tất cả hop thành công, hoặc tất cả revert.
+The security mechanism for multi-hop payments: either every hop succeeds, or all of them revert.
 
 ## Multi-hop Route
-Payment không cần channel trực tiếp sender↔receiver — đi qua node trung gian nếu đủ liquidity. VD A-B-C: A trả C qua B (1 hop trung gian).
+A payment doesn't need a direct sender-receiver channel — it can go through an intermediary node if there's enough liquidity. E.g. A-B-C: A pays C through B (1 intermediary hop).
 
 ## Invoice
-Yêu cầu thanh toán (Bech32m string): amount, asset, payment_hash, expiry, description.
+A payment request (a Bech32m string): amount, asset, payment_hash, expiry, description.
 
 ## Shannon
-Đơn vị nhỏ nhất CKB. 1 CKB = 100,000,000 Shannon.
+The smallest CKB unit. 1 CKB = 100,000,000 Shannon.
 
-## Fiber RPC (methods Test Lab dùng)
-JSON-RPC 2.0 của FNN. Các method chính Test Lab gọi:
-- `get_node_info` — check node READY
+## Fiber RPC (methods Test Lab uses)
+FNN's JSON-RPC 2.0 interface. The main methods Test Lab calls:
+- `get_node_info` — check that a node is READY
 - `open_channel` / `list_channels` / `close_channel`
 - `new_invoice` / `get_invoice`
 - `send_payment`
-- `subscribe_store_changes` — (optional v2) event thay polling
+- `subscribe_store_changes` — (optional, v2) events instead of polling
 
 ## RUSD
-Stablecoin trên CKB testnet (dạng UDT). Dùng cho kịch bản multi-asset (v2 stretch).
+A stablecoin on the CKB testnet (a UDT). Used for the multi-asset scenario (v2 stretch).
 
-## ErrorCategory (mã lỗi chuẩn hoá của Test Lab)
-Tập mã lỗi Test Lab dùng trong `expect.reason`. Danh sách:
+## ErrorCategory (Test Lab's normalized error codes)
+The set of error codes Test Lab uses in `expect.reason`. The list:
 `insufficient_outbound`, `insufficient_inbound`, `no_route_found`, `peer_offline`, `invoice_expired`, `amount_out_of_range`, `asset_mismatch`, `channel_not_ready`, `reserve_violation`.
 
-FNN luôn trả JSON-RPC `code: -32000` (generic) nên phải phân loại bằng **substring của `message`** — xem `lib/scenario/errorCategory.ts::mapError()` và `docs/hands-on/rpc-notebook.md` §8/§9. Mapping ĐÃ verify với node thật (FNN 0.8.0):
+FNN always returns JSON-RPC `code: -32000` (generic), so failures must be classified by a **substring of the `message`** — see `lib/scenario/errorCategory.ts::mapError()` and `docs/hands-on/rpc-notebook.md` sections 8/9. Mappings ALREADY verified against a real node (FNN 0.8.0):
 
-| ErrorCategory | Tín hiệu phân loại | Verify tại |
+| ErrorCategory | Classification signal | Verified in |
 |---|---|---|
-| `insufficient_outbound` | message: `Insufficient balance` / `max outbound liquidity … is insufficient` (peer VẪN kết nối) | E0-5, E5-3 |
+| `insufficient_outbound` | message: `Insufficient balance` / `max outbound liquidity … is insufficient` (the peer is STILL connected) | E0-5, E5-3 |
 | `no_route_found` | message: `PathFind error: no path found` | E5-2 |
-| `peer_offline` | **`list_peers` không còn target** (peer offline cho lỗi message TRÙNG `insufficient_outbound` "max outbound liquidity 0" — phải phân biệt bằng kết nối, không bằng message) | E8-2 |
+| `peer_offline` | **the target is no longer in `list_peers`** (an offline peer produces a message IDENTICAL to `insufficient_outbound`'s "max outbound liquidity 0" — the two must be distinguished by connectivity, not by message) | E8-2 |
 | `invoice_expired` | message: `invoice is expired` (`InvalidParameter: Failed to validate payment request`) | E8-1 |
 
-Vì `peer_offline` trùng message với `insufficient_outbound`, phân loại đi qua `classifyFailure()`: ưu tiên `peerConnected === false` → `peer_offline`, còn lại mới `mapError()` theo message. Các loại còn lại (`amount_out_of_range`, `asset_mismatch`, `channel_not_ready`, `reserve_violation`, `insufficient_inbound`) **chưa verify**. Chốt chính thức vào `decisions-log.md` cần human confirm.
+Because `peer_offline` shares its message with `insufficient_outbound`, classification goes through `classifyFailure()`: it prioritizes `peerConnected === false` -> `peer_offline`, and only falls back to `mapError()` by message otherwise. The remaining categories (`amount_out_of_range`, `asset_mismatch`, `channel_not_ready`, `reserve_violation`, `insufficient_inbound`) are **not yet verified**. Recording them officially in `decisions-log.md` requires human confirmation.
 
 ---
 
-## Thuật ngữ riêng của Test Lab
+## Test Lab-specific terms
 
 ## Scenario
-1 file YAML khai báo 1 tình huống test: topology (nodes + channels) + seed + expect. Tầng 1 settings — dev tự viết được, không đụng code.
+One YAML file declaring one test situation: topology (nodes + channels) + seed + expect. Tier-1 settings — a developer can write these without touching code.
 
 ## Topology
-Cấu hình các node + channel của 1 scenario. VD `two-hop-route` = 3 node A-B-C, 2 channel.
+The node + channel configuration of a scenario. E.g. `two-hop-route` = 3 nodes A-B-C, 2 channels.
 
 ## Seed
-Các hành động chạy sau khi topology sẵn sàng (gửi payment mẫu, tạo invoice hết hạn, kill node...).
+The actions run once the topology is ready (sending a sample payment, creating an expired invoice, killing a node...).
 
 ## Run / run-id
-1 lần chạy `fiber-lab up`. Mỗi run có `run-id` duy nhất, mọi tài nguyên gắn prefix theo nó để cô lập.
+One execution of `fiber-lab up`. Each run has a unique `run-id`, and every resource is prefixed by it for isolation.
 
 ## Run-log
-File JSON ghi lại toàn bộ 1 run (steps + mọi RPC call thô). Nguồn sự thật để debug sau khi container đã reset.
+A JSON file recording an entire run (steps + every raw RPC call). The source of truth for debugging after the containers have been reset.
 
 ## test-kit
-Thư viện assertion (dùng trong Vitest): `expectPaymentSucceeds`, `expectPaymentFails`, `expectChannelState`.
+The assertion library (used from Vitest): `expectPaymentSucceeds`, `expectPaymentFails`, `expectChannelState`.
 
 ## offckb
-Công cụ dựng CKB devnet local + faucet. **Lưu ý:** đường đã-chứng-minh là dùng CKB dev chain trong docker-compose của `fiber-demo-startup`, không phải offckb standalone. offckb chỉ là phương án thay thế nếu cần.
+A tool for building a local CKB devnet + faucet. **Note:** the proven path is to use the CKB dev chain inside `fiber-demo-startup`'s docker-compose, not standalone offckb. offckb is only a fallback option if needed.
 
-## Tài liệu chính thức (nguồn tra cứu)
-- Onboarding hackathon: github.com/RetricSu/fiber-hackathon-docs
-- Docs chính: fiber.world/docs · How it works: /docs/how-it-works
+## Official documentation (reference sources)
+- Hackathon onboarding: github.com/RetricSu/fiber-hackathon-docs
+- Main docs: fiber.world/docs · How it works: /docs/how-it-works
 - RPC reference: fiber.world/docs/api-reference
-- Quick-start: /docs/quick-start/run-a-node · /basic-transfer · /transfer-stablecoin · /multi-hop-transfer (≈ two-hop-route)
-- SDK JS: fiber.world/docs/build/sdk/js (`@ckb-ccc/fiber`)
+- Quick-start: /docs/quick-start/run-a-node · /basic-transfer · /transfer-stablecoin · /multi-hop-transfer (~ two-hop-route)
+- JS SDK: fiber.world/docs/build/sdk/js (`@ckb-ccc/fiber`)
 - FNN source: github.com/nervosnetwork/fiber · Fiber scripts: github.com/nervosnetwork/fiber-scripts
-- Faucet testnet: faucet.nervos.org
+- Testnet faucet: faucet.nervos.org
 
 ## Global config (`fiber-lab.config.ts`)
-Tầng 2 settings — hành vi chung cả hệ thống (timeout, poll interval, version image). Dev sửa 1 lần.
+Tier-2 settings — system-wide behavior (timeout, poll interval, image version). The developer edits it once.
 
 ## Determinism
-Cùng scenario + cùng version → cùng kết quả. Flaky = bug của Test Lab, không phải hành vi chấp nhận được.
+Same scenario + same version -> same result. Flakiness is a Test Lab bug, not acceptable behavior.

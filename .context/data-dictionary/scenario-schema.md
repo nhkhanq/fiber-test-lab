@@ -7,52 +7,52 @@ tags: [yaml, zod, scenario, run-log, schema]
 
 # Data Dictionary — Scenario Schema + Run-log
 
-> Test Lab không có database. "Dữ liệu" của nó gồm 2 loại: **file kịch bản YAML** (input, dev viết) và **run-log JSON** (output, hệ thống ghi). File này định nghĩa cả hai. Mọi file YAML phải validate qua `zod` khớp schema dưới đây trước khi dùng.
+> Test Lab has no database. Its "data" comes in two kinds: **scenario YAML files** (input, written by a developer) and **run-log JSON** (output, written by the system). This file defines both. Every YAML file must validate with `zod` against the schema below before use.
 
 ## 1. Scenario file (`topology/scenarios/<name>.yaml`)
 
-### Cấu trúc tổng thể
+### Overall structure
 ```yaml
-name: string                 # định danh kịch bản, khớp tên file
-description: string          # mô tả ngắn, hiện ở `fiber-lab list`
-nodes: string[]              # tên các node, VD [alice, bob, carol]
-channels: Channel[]          # channel mở sẵn khi seed
-seed: SeedStep[]             # hành động chạy sau khi topology sẵn sàng
-expect: Expectation          # kết quả mong đợi (dùng cho test-kit + tự-verify)
+name: string                 # scenario identifier, matches the file name
+description: string          # short description, shown by `fiber-lab list`
+nodes: string[]              # node names, e.g. [alice, bob, carol]
+channels: Channel[]          # channels opened as part of the seed
+seed: SeedStep[]             # actions run once the topology is ready
+expect: Expectation          # the expected outcome (used by test-kit + self-verification)
 ```
 
-### Kiểu `Channel`
-| Field | Type | Bắt buộc | Mô tả |
+### The `Channel` type
+| Field | Type | Required | Description |
 |---|---|---|---|
-| from | string | ✓ | Tên node mở channel (phải có trong `nodes`) |
-| to | string | ✓ | Tên node đối diện (phải có trong `nodes`) |
-| capacity | number | ✓ | Capacity (CKB) node `from` khoá vào channel |
-| asset | "CKB" \| "RUSD" | | Mặc định "CKB" |
-| push | number | | Số CKB đẩy sẵn sang `to` khi mở (tạo inbound cho `from`) |
+| from | string | yes | The node opening the channel (must be in `nodes`) |
+| to | string | yes | The counterparty node (must be in `nodes`) |
+| capacity | number | yes | Capacity (CKB) node `from` locks into the channel |
+| asset | "CKB" \| "RUSD" | | Defaults to "CKB" |
+| push | number | | CKB pushed to `to` on open (creates inbound for `from`) |
 
-### Kiểu `SeedStep`
-| Field | Type | Mô tả |
+### The `SeedStep` type
+| Field | Type | Description |
 |---|---|---|
-| action | "send_payment" \| "new_invoice" \| "wait" \| "kill_node" \| "start_node" | Hành động |
-| from | string | Node thực hiện (với send_payment) |
-| to | string | Node đích |
-| amount | number | Số tiền (send_payment/new_invoice) |
-| asset | "CKB" \| "RUSD" | Mặc định "CKB" |
-| expiresInSec | number | Với new_invoice — set hết hạn ngắn để test |
-| node | string | Với kill_node/start_node — node bị tác động |
-| durationSec | number | Với wait — chờ bao lâu |
+| action | "send_payment" \| "new_invoice" \| "wait" \| "kill_node" \| "start_node" | The action |
+| from | string | The node performing it (for send_payment) |
+| to | string | The target node |
+| amount | number | The amount (send_payment/new_invoice) |
+| asset | "CKB" \| "RUSD" | Defaults to "CKB" |
+| expiresInSec | number | For new_invoice — set a short expiry to test it |
+| node | string | For kill_node/start_node — the affected node |
+| durationSec | number | For wait — how long to wait |
 
-### Kiểu `Expectation`
-| Field | Type | Mô tả |
+### The `Expectation` type
+| Field | Type | Description |
 |---|---|---|
-| status | "succeeded" \| "failed" | Kết quả payment cuối cùng mong đợi |
-| reason | ErrorCategory | Nếu failed — mã lỗi mong đợi (xem glossary) |
-| routeHops | number | Số hop trung gian mong đợi (VD 1 cho A-B-C) |
+| status | "succeeded" \| "failed" | The expected final payment outcome |
+| reason | ErrorCategory | If failed — the expected error code (see the glossary) |
+| routeHops | number | The expected number of intermediary hops (e.g. 1 for A-B-C) |
 
-### Ví dụ đầy đủ
+### A full example
 ```yaml
 name: insufficient-capacity
-description: Payment fail vì outbound không đủ
+description: The payment fails because outbound liquidity is insufficient
 nodes: [alice, bob]
 channels:
   - { from: alice, to: bob, capacity: 50 }
@@ -68,36 +68,36 @@ expect:
 
 ## 2. Run-log (`.fiber-lab/runs/<run-id>.json`)
 
-Ghi lại toàn bộ 1 lần `fiber-lab up` để debug lại sau khi container đã bị reset.
+Records an entire `fiber-lab up` run so it can be debugged after the containers have been reset.
 
-| Field | Type | Mô tả |
+| Field | Type | Description |
 |---|---|---|
-| runId | string | Định danh duy nhất lần chạy |
-| scenario | string | Tên scenario đã chạy |
-| status | "running" \| "completed" \| "failed" \| "reset" | Trạng thái tổng |
-| startedAt | ISO8601 | Thời điểm bắt đầu |
-| finishedAt | ISO8601 \| null | Thời điểm kết thúc |
-| network | string | Tên docker network (flab_<run-id>) |
-| nodes | NodeRecord[] | Danh sách node + container name + port map tạm (nếu có) |
-| steps | StepRecord[] | Từng bước seed: action, input, kết quả |
-| rpcCalls | RpcRecord[] | Mọi RPC gọi ra: method, params, response/error thô |
-| error | string \| null | Lỗi tổng nếu có |
+| runId | string | The run's unique identifier |
+| scenario | string | The name of the scenario that ran |
+| status | "running" \| "completed" \| "failed" \| "reset" | The overall status |
+| startedAt | ISO8601 | When it started |
+| finishedAt | ISO8601 \| null | When it finished |
+| network | string | The Docker network name (flab_<run-id>) |
+| nodes | NodeRecord[] | The node list + container names + temporary port maps (if any) |
+| steps | StepRecord[] | Each seed step: action, input, result |
+| rpcCalls | RpcRecord[] | Every outgoing RPC call: method, params, raw response/error |
+| error | string \| null | The overall error, if any |
 
-### Kiểu `RpcRecord` (quan trọng để debug)
-| Field | Type | Mô tả |
+### The `RpcRecord` type (important for debugging)
+| Field | Type | Description |
 |---|---|---|
-| node | string | Node đích của RPC |
-| method | string | VD open_channel, send_payment |
-| params | object | Tham số gửi đi |
-| response | object \| null | Kết quả thô |
-| error | object \| null | Lỗi thô từ node (giữ nguyên để debug) |
-| at | ISO8601 | Thời điểm gọi |
+| node | string | The RPC's target node |
+| method | string | e.g. open_channel, send_payment |
+| params | object | The parameters sent |
+| response | object \| null | The raw result |
+| error | object \| null | The raw error from the node (kept as-is for debugging) |
+| at | ISO8601 | When the call was made |
 
-> Run-log là "nguồn sự thật" để hiểu vì sao 1 test fail — vì sau `reset`, container không còn để hỏi lại.
+> The run-log is the "source of truth" for understanding why a test failed — once `reset` has run, the containers are gone and can no longer be asked.
 
-## 3. Quy tắc validation (zod)
+## 3. Validation rules (zod)
 
-- `channels[].from`/`to` phải nằm trong `nodes` — nếu không: lỗi rõ "node X không khai báo trong nodes".
-- `capacity` phải > mức reserve tối thiểu (99 CKB/bên — xem glossary) nếu không muốn channel bị từ chối.
-- `expect.reason` chỉ được set khi `expect.status === "failed"`.
-- Tên scenario `name` nên khớp tên file để tránh nhầm.
+- `channels[].from`/`to` must be within `nodes` — otherwise: a clear error, "node X is not declared in nodes".
+- `capacity` must be above the minimum reserve (99 CKB per side — see the glossary), or the channel will be rejected.
+- `expect.reason` may only be set when `expect.status === "failed"`.
+- The scenario's `name` should match its file name, to avoid confusion.

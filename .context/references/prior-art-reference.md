@@ -7,99 +7,99 @@ tags: [prior-art, reference, compliance, reuse]
 
 # Prior-Art & Reference — Fiber Test Lab
 
-> File tham khảo độc lập. KHÔNG thay đổi các quyết định trong context chính (system-design, decisions-log...).
-> Mục đích: ghi lại các repo được phép ĐỌC làm tham khảo, ranh giới pháp lý, và bản đồ "đọc file nào để biết cái gì".
+> A standalone reference file. It does NOT change decisions in the main context (system-design, decisions-log...).
+> Purpose: record which repos are permitted to READ as reference, the legal boundary, and a map of "read which file to learn what".
 
 ---
 
-## 1. Các repo dùng làm tham khảo (reference oracle)
+## 1. Repos used as a reference oracle
 
-Đây là code THẬT đang chạy — đọc để hiểu cách gọi RPC đúng, params, và lỗi thật, thay vì đoán.
+This is REAL, running code — read to understand the correct RPC calls, parameters, and real errors, instead of guessing.
 
-| Repo | Là gì | Dùng để tham khảo điều gì |
+| Repo | What it is | Used as a reference for |
 |---|---|---|
-| `cryptape/ckb-py-integration-test` (branch `fiber`) | QA suite Python của team, test chính node FNN | Cách gọi RPC + params + lỗi thật + flow mở channel/multi-hop |
-| `HappySonnyDev/fiber-demo-startup` (branch `demo-0.8`) | Local env: docker-compose CKB dev chain + nhiều FNN node | Cách cấu hình FNN + CKB devnet trong docker |
-| `nervosnetwork/fiber` | Source FNN chính thức | RPC reference gốc, hành vi node |
-| fiber.world/docs/api-reference | RPC docs chính thức | Đối chiếu tên method/params |
+| `cryptape/ckb-py-integration-test` (branch `fiber`) | The team's Python QA suite for the FNN node itself | Correct RPC calls + parameters + real errors + the channel-opening/multi-hop flow |
+| `HappySonnyDev/fiber-demo-startup` (branch `demo-0.8`) | A local environment: a docker-compose for the CKB dev chain + several FNN nodes | How to configure FNN + a CKB devnet in Docker |
+| `nervosnetwork/fiber` | The official FNN source | The original RPC reference, node behavior |
+| fiber.world/docs/api-reference | The official RPC docs | Cross-checking method names/parameters |
 
 ---
 
-## 2. Ranh giới pháp lý (QUAN TRỌNG — đọc trước khi dùng)
+## 2. Legal boundary (IMPORTANT — read before using)
 
-**Cả 3 repo trên KHÔNG có file LICENSE** (đã kiểm tra 2026-07-04). Mặc định luật bản quyền = "all rights reserved". Do đó:
+**None of the 3 repos above have a LICENSE file** (checked 2026-07-04). By default, copyright law then means "all rights reserved". As a result:
 
-| Hành vi | Được phép? | Ghi chú |
+| Action | Allowed? | Note |
 |---|---|---|
-| ĐỌC code để hiểu cách làm | ✅ | Bản quyền không bảo vệ ý tưởng/API/hành vi |
-| Học tên RPC + params + thứ tự gọi rồi **tự viết lại bằng TypeScript** | ✅ | Tên RPC/params là "sự thật kỹ thuật" để tương tác, không phải sáng tạo được bảo hộ |
-| Copy nguyên `docker-compose.yml`, `Dockerfile`, hay code Python vào repo mình | ❌ | Sao chép "expression" — không license = không có phép. **TỰ VIẾT compose/config của mình.** |
-| Chạy FNN binary / docker image chính thức | ✅ | Được publish để dùng |
+| READING the code to understand how something works | Yes | Copyright does not protect ideas/APIs/behavior |
+| Learning RPC names + parameters + call order and **rewriting them yourself in TypeScript** | Yes | RPC names/parameters are "technical facts" needed to interoperate, not protectable creative expression |
+| Copying the raw `docker-compose.yml`, `Dockerfile`, or Python code into this repo | No | Copying "expression" — no license means no permission. **WRITE your own compose/config.** |
+| Running the official FNN binary / Docker image | Yes | It is published for use |
 
-**Nguyên tắc vàng:** *Đọc để học → tự viết lại bằng lời/code của mình.* Không paste nguyên văn.
+**The golden rule:** *Read to learn -> rewrite in your own words/code.* Never paste verbatim.
 
-**3 việc nên làm để chắc chắn:**
-1. Ghi credit trong README (xem mục 5).
-2. Cân nhắc mở issue xin repo chủ thêm license.
-3. Đọc luật hackathon chính thức về "building on existing repos" + xác nhận với ban tổ chức nếu chưa rõ.
+**3 things worth doing to be safe:**
+1. Give credit in the README (see section 5).
+2. Consider opening an issue asking the repo owner to add a license.
+3. Read the hackathon's official rules on "building on existing repos" + confirm with the organizers if unclear.
 
-**Lợi ích phụ:** tự viết code = tăng điểm "original work" của hackathon, và vẫn giữ được lợi ích "không sợ làm sai" vì có bản chạy thật để đối chiếu.
+**Side benefit:** writing your own code increases the hackathon's "original work" score, while keeping the benefit of "not afraid of getting it wrong" because there's a real running reference to check against.
 
 ---
 
-## 3. Bản đồ "đọc file nào để biết cái gì" (reference oracle map)
+## 3. A map of "read which file to learn what" (the reference oracle map)
 
-| Cần biết | Đọc file (trong cryptape/ckb-py-integration-test) |
+| Need to know | Read this file (in cryptape/ckb-py-integration-test) |
 |---|---|
-| Tên + params RPC chính xác | `framework/fiber_rpc.py` |
-| Cách khởi động node + connect peer | `framework/basic_fiber.py` → `Fiber.init_by_port()`, `start_new_fiber()` |
-| Mở channel + chờ READY | `basic_fiber.py` → `open_channel()`, `wait_for_channel_state(..., "CHANNEL_READY")` |
-| Gửi payment + chờ trạng thái | `basic_fiber.py` → `send_payment()`, `wait_payment_state()` |
-| Multi-hop router | `test_cases/fiber/devnet/send_payment_with_router/test_send_payment_with_router.py` → `build_router`, `send_payment_with_router` |
-| Lỗi thật khi payment fail (chuỗi lỗi gì) | các block `try/except` trong test — VD `"Failed to send onion packet"`. Dùng để chốt `ErrorCategory`. |
-| Cấu hình FNN + CKB devnet trong docker | `fiber-demo-startup`: `docker-compose.yml`, `fiber/Dockerfile`, `ckb/Dockerfile`, `fiber/transfer/` |
+| Exact RPC names + parameters | `framework/fiber_rpc.py` |
+| How to start a node + connect a peer | `framework/basic_fiber.py` -> `Fiber.init_by_port()`, `start_new_fiber()` |
+| Opening a channel + waiting for READY | `basic_fiber.py` -> `open_channel()`, `wait_for_channel_state(..., "CHANNEL_READY")` |
+| Sending a payment + waiting for its status | `basic_fiber.py` -> `send_payment()`, `wait_payment_state()` |
+| Multi-hop routing | `test_cases/fiber/devnet/send_payment_with_router/test_send_payment_with_router.py` -> `build_router`, `send_payment_with_router` |
+| The real error text when a payment fails | the `try/except` blocks in the tests — e.g. "Failed to send onion packet". Used to finalize `ErrorCategory`. |
+| Configuring FNN + a CKB devnet in Docker | `fiber-demo-startup`: `docker-compose.yml`, `fiber/Dockerfile`, `ckb/Dockerfile`, `fiber/transfer/` |
 
 ---
 
-## 4. Primitive nên PORT (tối thiểu) vs BỎ
+## 4. Primitives to PORT (minimal) vs. SKIP
 
-Chỉ port đúng phần lõi đủ chạy scenario must-have. KHÔNG port hết suite (sẽ phình, không kịp 11 ngày).
+Only port the minimal core needed to run the must-have scenarios. Do NOT port the whole suite (it would balloon in scope and blow the 11-day budget).
 
-**PORT (tối thiểu):**
-- start node · connect peer
-- `open_channel` + wait `CHANNEL_READY`
+**PORT (minimal):**
+- start a node · connect a peer
+- `open_channel` + wait for `CHANNEL_READY`
 - `new_invoice`
 - `send_payment`
-- `send_payment_with_router` (multi-hop, cho `two-hop-route`)
+- `send_payment_with_router` (multi-hop, for `two-hop-route`)
 - `wait_payment_state`
-- bắt lỗi payment (map sang `ErrorCategory`)
+- catching payment errors (map them to `ErrorCategory`)
 
-**BỎ (không liên quan scenario must-have):**
+**SKIP (not relevant to must-have scenarios):**
 - watchtower, abandon/update channel, compatibility, graph_*, password, remove_tlc...
 
-**Cái MỚI đặt lên trên (đây là giá trị khác biệt của Test Lab — không có trong Python suite):**
-- Lớp khai báo scenario **YAML** (thay 20–40 dòng Python imperative)
-- Assertion **TS-native** (`expectPaymentFails("insufficient_outbound")`) với error chuẩn hoá
-- CLI `fiber-lab` + run-id isolation + run-log JSON
+**What's NEW on top (this is Test Lab's distinct value — not present in the Python suite):**
+- A declarative **YAML** scenario layer (replacing 20-40 lines of imperative Python)
+- **TS-native** assertions (`expectPaymentFails("insufficient_outbound")`) with normalized errors
+- The `fiber-lab` CLI + run-id isolation + a JSON run-log
 
 ---
 
-## 5. Attribution mẫu (dán vào README khi nộp)
+## 5. Sample attribution (paste into the README on submission)
 
 ```
 ## Prior art & credits
-Fiber Test Lab được xây dựng như một test harness TS-native, declarative, app-facing.
-Nó tham khảo (không sao chép) các dự án mã nguồn mở sau để đảm bảo tính chính xác:
-- cryptape/ckb-py-integration-test — Python integration suite cho FNN (tham khảo RPC flow & error).
-- HappySonnyDev/fiber-demo-startup — local docker env (tham khảo cách cấu hình FNN + CKB devnet).
-- nervosnetwork/fiber — FNN reference implementation.
-Toàn bộ code trong repo này được viết mới bằng TypeScript trong thời gian hackathon.
+Fiber Test Lab was built as a TS-native, declarative, app-facing test harness.
+It references (does not copy) the following open-source projects to ensure accuracy:
+- cryptape/ckb-py-integration-test — a Python integration suite for FNN (referenced for RPC flow & errors).
+- HappySonnyDev/fiber-demo-startup — a local Docker environment (referenced for how to configure FNN + a CKB devnet).
+- nervosnetwork/fiber — the FNN reference implementation.
+All code in this repo was written from scratch in TypeScript during the hackathon.
 ```
 
 ---
 
-## 6. Đo mức khác biệt (để trung thực trong submission)
+## 6. Measuring the delta (to stay honest in the submission)
 
-- ~60% năng lực (dựng node, gửi payment, coverage scenario) đã tồn tại bằng Python trong cryptape suite.
-- ~40% mới của Test Lab nằm ở: **declarative YAML + TS-native assertion + app-facing packaging** (kiểu "Polar cho Fiber").
-- Định vị đúng: *"mang pattern local-test app-facing, declarative, TS-native đến Fiber"* — KHÔNG claim "chưa ai từng test Fiber".
+- ~60% of the capability (bringing up nodes, sending payments, scenario coverage) already exists in Python in the cryptape suite.
+- ~40% of what's new in Test Lab is: **declarative YAML + TS-native assertions + app-facing packaging** (in the spirit of "Polar for Fiber").
+- The correct positioning: *"bringing a local, app-facing, declarative, TS-native testing pattern to Fiber"* — NOT claiming *"nobody has ever tested Fiber before"*.
