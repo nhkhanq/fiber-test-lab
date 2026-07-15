@@ -245,7 +245,9 @@ export async function reset(runId: string, config: GlobalConfig): Promise<void> 
   const network = networkName(config, runId);
   await teardown(network, network, composeFilePath(runId)); // project name == network
   if (await fileExists(join(process.cwd(), ".fiber-lab/runs", `${runId}.json`))) {
-    await RunLogStore.setStatus(runId, "reset");
+    await RunLogStore.setStatus(runId, "reset").catch((error) => {
+      console.error(`Warning: could not update run-log for ${runId} (${(error as Error).message}). Docker resources were still cleaned up.`);
+    });
   }
   await rm(composeFilePath(runId), { force: true });
 }
