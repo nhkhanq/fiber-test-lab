@@ -10,44 +10,44 @@ tags: [scenario, polling, isolation, cleanup]
 
 ## Scenario Rules
 
-**BR-SCN-001:** Mỗi scenario phải validate qua `zod` TRƯỚC khi chạm docker. Sai schema → exit 1, in lỗi rõ ràng field nào sai, KHÔNG dựng container nào.
+**BR-SCN-001:** Every scenario must be validated with `zod` BEFORE touching Docker. A bad schema -> exit 1, print a clear error naming the offending field, create NO containers.
 
-**BR-SCN-002:** `channels[].from`/`to` phải nằm trong `nodes`. Vi phạm → lỗi validation.
+**BR-SCN-002:** `channels[].from`/`to` must be within `nodes`. A violation -> a validation error.
 
-**BR-SCN-003:** `capacity` mỗi channel phải đủ trên mức reserve tối thiểu (99 CKB/bên) trừ khi scenario CỐ TÌNH test lỗi reserve — khi đó `expect.reason` phải phản ánh điều đó.
+**BR-SCN-003:** Each channel's `capacity` must be above the minimum reserve (99 CKB per side) unless the scenario is DELIBERATELY testing a reserve failure — in which case `expect.reason` must reflect that.
 
-**BR-SCN-004:** `expect.reason` chỉ hợp lệ khi `expect.status === "failed"`.
+**BR-SCN-004:** `expect.reason` is only valid when `expect.status === "failed"`.
 
 ## Topology / Isolation Rules
 
-**BR-ISO-001:** Mỗi lần `up` sinh 1 `run-id` duy nhất. Mọi tài nguyên (network, container, run-log, port map) gắn prefix theo run-id.
+**BR-ISO-001:** Every `up` generates one unique `run-id`. Every resource (network, container, run-log, port map) is prefixed by the run-id.
 
-**BR-ISO-002:** Container/network KHÔNG bind port ra host mặc định — chỉ nghe trong network `flab_<run-id>`. Chỉ cấp port map tạm khi test-kit (ngoài docker) cần gọi RPC, và đóng khi reset.
+**BR-ISO-002:** Containers/networks are NOT bound to the host by default — they only listen on the `flab_<run-id>` network. A temporary port map is only opened when the test-kit (outside Docker) needs to call RPC, and is closed on reset.
 
-**BR-ISO-003:** Số node tối đa mỗi scenario giới hạn 3 (tài nguyên máy). Muốn nhiều hơn phải override có chủ đích trong global config + cảnh báo.
+**BR-ISO-003:** The maximum number of nodes per scenario is limited to 3 (machine resources). Going higher requires a deliberate override in the global config, with a warning.
 
-**BR-ISO-004:** Hai run song song KHÔNG được chia sẻ network/container. Nếu phát hiện xung đột tên → sinh lại run-id, không ghi đè run cũ.
+**BR-ISO-004:** Two parallel runs must NOT share a network/container. If a name collision is detected -> generate a new run-id, never overwrite the existing run.
 
 ## Readiness / Polling Rules
 
-**BR-POL-001:** Sau `docker compose up`, phải chờ mỗi node READY (poll `get_node_info` thành công) trước khi seed. Timeout mặc định `pollTimeoutMs`.
+**BR-POL-001:** After `docker compose up`, wait for every node to be READY (poll `get_node_info` successfully) before seeding. Default timeout: `pollTimeoutMs`.
 
-**BR-POL-002:** Sau `open_channel`, phải chờ channel đạt trạng thái READY (poll `list_channels`) trước khi coi là mở xong.
+**BR-POL-002:** After `open_channel`, wait for the channel to reach the READY state (poll `list_channels`) before considering it open.
 
-**BR-POL-003:** test-kit assertion (`expectPaymentSucceeds`...) poll theo `pollIntervalMs` đến khi đạt kết quả hoặc `pollTimeoutMs`. Hết timeout mà chưa đạt → fail test với run-log đính kèm.
+**BR-POL-003:** test-kit assertions (`expectPaymentSucceeds`...) poll on `pollIntervalMs` until the result is reached or `pollTimeoutMs` elapses. Timing out without reaching the result -> fail the test with the run-log attached.
 
-**BR-POL-004:** Mọi RPC call phải được ghi vào run-log (method/params/response/error) — kể cả khi thành công — để debug lại sau reset.
+**BR-POL-004:** Every RPC call must be recorded to the run-log (method/params/response/error) — even on success — so it can be debugged after a reset.
 
 ## Cleanup Rules
 
-**BR-CLN-001:** `up` lỗi giữa chừng phải tự teardown những gì đã tạo (trừ khi `--keep`), không để lại rác.
+**BR-CLN-001:** If `up` fails partway through, it must tear down everything it already created (unless `--keep`), leaving no leftover resources.
 
-**BR-CLN-002:** `reset` phải xoá: container, network, port map, và đánh dấu run-log `status: reset` (KHÔNG xoá file run-log — giữ để tham khảo lịch sử; chỉ xoá tài nguyên docker).
+**BR-CLN-002:** `reset` must remove: the container, the network, the port map, and mark the run-log `status: reset` (do NOT delete the run-log file — keep it as a historical record; only Docker resources are removed).
 
-**BR-CLN-003:** `keepRunOnFailure: true` (global config) → khi test fail, giữ container để debug, in hướng dẫn `fiber-lab logs`/`reset`.
+**BR-CLN-003:** `keepRunOnFailure: true` (global config) -> when a test fails, keep the container for debugging, and print guidance for `fiber-lab logs`/`reset`.
 
 ## Determinism Rules
 
-**BR-DET-001:** Cùng 1 scenario + cùng version FNN/offckb → phải cho cùng kết quả `expect`. Nếu flaky (lúc pass lúc fail) → coi là bug của Test Lab (thường do thiếu chờ READY), không phải hành vi chấp nhận được.
+**BR-DET-001:** The same scenario + the same FNN/offckb version must produce the same `expect` result. If it is flaky (passes sometimes, fails other times) -> treat it as a Test Lab bug (usually a missing wait for READY), not as acceptable behavior.
 
-**BR-DET-002:** Version FNN binary + `@ckb-ccc/fiber` phải pinned. Kết quả verify chỉ được coi là đúng với version đã ghi trong `scenario-catalog.md`.
+**BR-DET-002:** The FNN binary version + `@ckb-ccc/fiber` version must be pinned. A verified result is only considered valid for the version recorded in `scenario-catalog.md`.

@@ -7,113 +7,113 @@ tags: [typescript, docker-compose, fiber-node, ckb-devnet, cli, testing, local]
 
 # System Design — Fiber Test Lab
 
-> Đây là file định nghĩa kiến trúc chi tiết nhất. Mọi quyết định implement phải khớp file này.
+> This is the most detailed architecture definition file. Every implementation decision must match this file.
 
 ## 1. Tech Stack
 
-| Layer | Technology | Lý do |
+| Layer | Technology | Rationale |
 |-------|-----------|-------|
-| Ngôn ngữ | TypeScript (strict) | Nhất quán hệ sinh thái Fiber JS/TS, dễ maintain |
-| Chạy CLI | `tsx` | Chạy thẳng `.ts` không cần build step riêng — tối ưu tốc độ hackathon |
-| CLI framework | `commander` | Nhẹ, đủ cho ~5 lệnh, không cần framework nặng |
-| Parse kịch bản | `yaml` | Đọc file scenario `.yaml` |
-| Validate schema | `zod` | Validate scenario TRƯỚC khi dựng docker — fail fast, message rõ |
-| Hạ tầng docker nền | **fork `fiber-demo-startup`** (`demo-0.8`) | ĐÃ dockerize sẵn CKB dev chain + nhiều FNN node + transfer container — không dựng lại từ đầu (xem mục 2b) |
-| Container orchestration | Docker + Docker Compose (v2, `docker compose`) | Điều phối N node Fiber + CKB dev chain, cô lập mạng nội bộ |
-| Fiber node | FNN binary (chính thức, pinned version) — image từ demo-startup | Node THẬT, không giả lập giao thức — kết quả test phản ánh hành vi thật |
-| CKB devnet | CKB dev chain tự dựng (image `nervos/ckb:v0.207.0` + `dev.toml` genesis tự bake) | Devnet local, cấp tiền qua **genesis pre-fund** (3 key cố định, 10 tỷ CKB/node) — KHÔNG dùng offckb/transfer container. Tương thích convention offckb 0.4.7. |
-| Gọi Fiber RPC | `@ckb-ccc/fiber` (SDK chính thức) | SDK hackathon khuyến nghị, tránh tự viết JSON-RPC thô |
-| Test framework | Vitest | Nhẹ, nhanh, dùng cho `test-kit` và test mẫu |
-| Lưu run-log | File JSON (fs) | Vòng đời dữ liệu ngắn — không cần Postgres (xem mục 8) |
-| Package manager | npm | 1 package duy nhất, không cần workspace |
+| Language | TypeScript (strict) | Consistent with the Fiber JS/TS ecosystem, easy to maintain |
+| Running the CLI | `tsx` | Runs `.ts` directly, no separate build step — optimizes for hackathon speed |
+| CLI framework | `commander` | Lightweight, enough for ~5 commands, no need for a heavy framework |
+| Scenario parsing | `yaml` | Reads `.yaml` scenario files |
+| Schema validation | `zod` | Validates a scenario BEFORE building Docker resources — fail fast, clear message |
+| Underlying docker infrastructure | **fork of `fiber-demo-startup`** (`demo-0.8`) | Already dockerizes the CKB dev chain + several FNN nodes + a transfer container — no need to build from scratch (see section 2b) |
+| Container orchestration | Docker + Docker Compose (v2, `docker compose`) | Orchestrates N Fiber nodes + the CKB dev chain, isolated on an internal network |
+| Fiber node | The official FNN binary (pinned version) — image from demo-startup | A REAL node, not a protocol simulation — test results reflect real behavior |
+| CKB devnet | A self-built CKB dev chain (`nervos/ckb:v0.207.0` image + a baked `dev.toml` genesis) | A local devnet, funded via **genesis pre-funding** (3 fixed keys, 10 billion CKB per node) — NOT using offckb/a transfer container. Compatible with the offckb 0.4.7 convention. |
+| Calling Fiber RPC | `@ckb-ccc/fiber` (the official SDK) | The SDK recommended by the hackathon, avoids hand-writing raw JSON-RPC |
+| Test framework | Vitest | Lightweight, fast, used for `test-kit` and example tests |
+| Storing the run-log | A JSON file (fs) | Short data lifecycle — no need for Postgres (see section 8) |
+| Package manager | npm | A single package, no workspace needed |
 
-**Pinned versions:** FNN version (theo `fiber-demo-startup demo-0.8`) và `@ckb-ccc/fiber` version phải ghim cứng trong `docs/scenario-catalog.md` và `package.json` — vì hành vi RPC có thể đổi giữa các bản, kết quả verify chỉ đúng với version đã test.
+**Pinned versions:** the FNN version (per `fiber-demo-startup demo-0.8`) and the `@ckb-ccc/fiber` version must be pinned in `docs/scenario-catalog.md` and `package.json` — RPC behavior can change between versions, so verified results are only valid for the tested version.
 
-## 2b. Build ON TOP of fiber-demo-startup (không dựng docker từ đầu)
+## 2b. Build ON TOP of fiber-demo-startup (not from a blank Docker setup)
 
-> Xác minh từ doc chính thức (2026-07-04): repo `github.com/HappySonnyDev/fiber-demo-startup` (branch `demo-0.8`) đã cung cấp docker-compose chạy **CKB dev chain local + 1 bootnode + 3 Fiber node + transfer container (cấp tiền) + app demo**. Đây là phần hạ tầng rủi ro/tốn thời gian nhất — ĐÃ có sẵn.
+> Verified from the official docs (2026-07-04): the repo `github.com/HappySonnyDev/fiber-demo-startup` (branch `demo-0.8`) already provides a docker-compose that runs a **local CKB dev chain + 1 bootnode + 3 Fiber nodes + a transfer container (funding) + a demo app**. This is the riskiest, most time-consuming infrastructure layer — and it ALREADY EXISTS.
 
-**Phân chia rõ: cái gì tái dùng, cái gì Test Lab tự làm**
+**Clear split: what is reused, what Test Lab builds itself**
 
-| Tầng | Nguồn | Ghi chú |
+| Layer | Source | Note |
 |---|---|---|
-| CKB dev chain + FNN node containers + fund distribution | **fiber-demo-startup (tái dùng)** | Fork compose + Dockerfile của nó làm nền |
-| Automated channel-opening (seeder) | **Test Lab (mới)** | demo-startup mở channel thủ công qua UI — Test Lab tự động hoá |
-| Scenario YAML (topology + seed + expect) | **Test Lab (mới)** | demo-startup không có khái niệm scenario |
-| Assertion / validation (test-kit) | **Test Lab (mới)** | demo-startup không có |
-| CLI chạy named scenario + run-id isolation + run-log | **Test Lab (mới)** | demo-startup chỉ có app demo tương tác |
+| CKB dev chain + FNN node containers + fund distribution | **fiber-demo-startup (reused)** | Fork its compose + Dockerfile as the base |
+| Automated channel opening (seeder) | **Test Lab (new)** | demo-startup opens channels manually through its UI — Test Lab automates this |
+| Scenario YAML (topology + seed + expect) | **Test Lab (new)** | demo-startup has no concept of a scenario |
+| Assertion / validation (test-kit) | **Test Lab (new)** | demo-startup has none |
+| CLI to run a named scenario + run-id isolation + run-log | **Test Lab (new)** | demo-startup only has an interactive demo app |
 
-Chính `fiber-demo-startup` tự nêu 4 thứ nó THIẾU để thành test harness — trùng khít phần "mới" ở trên. Đây là ranh giới đóng góp của Test Lab.
+`fiber-demo-startup` itself states the 4 things it is MISSING to become a test harness — which exactly match the "new" items above. That is Test Lab's boundary of contribution.
 
-**Hệ quả với "compose sinh động" (mục 6):** thay vì sinh compose hoàn toàn từ số 0, Test Lab **tham số hoá compose của demo-startup** (số node, capacity, run-id prefix) — nhẹ hơn, ít rủi ro hơn. Nguyên tắc cô lập run-id vẫn giữ nguyên.
+**Consequence for "dynamic compose" (section 6):** instead of generating compose entirely from scratch, Test Lab **parameterizes demo-startup's compose** (node count, capacity, run-id prefix) — lighter and lower risk. The run-id isolation principle still holds.
 
-## 2. Kiến trúc tổng thể
+## 2. Overall architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                        Máy local của developer                       │
+│                     The developer's local machine                    │
 │                                                                       │
-│   developer ──> fiber-lab CLI (commander, chạy bằng tsx)             │
+│   developer ──> fiber-lab CLI (commander, run via tsx)               │
 │                     │                                                 │
-│                     │ 1. đọc scenarios/<name>.yaml                   │
-│                     │ 2. validate bằng zod                           │
-│                     │ 3. sinh run-id + docker-compose động           │
-│                     │ 4. docker compose up (network cô lập theo run-id)│
-│                     │ 5. seed: gọi RPC mở channel/tạo invoice        │
-│                     │ 6. ghi run-log JSON                            │
+│                     │ 1. reads scenarios/<name>.yaml                 │
+│                     │ 2. validates with zod                          │
+│                     │ 3. generates a run-id + dynamic docker-compose │
+│                     │ 4. docker compose up (network isolated per run-id)│
+│                     │ 5. seed: calls RPC to open channels/create invoices│
+│                     │ 6. writes the run-log JSON                     │
 │                     ▼                                                 │
 │   ┌───────────────────────────────────────────────────────────────┐ │
-│   │   Docker network cô lập: flab_<run-id>  (KHÔNG bind ra host)   │ │
+│   │   Isolated Docker network: flab_<run-id>  (NOT bound to host)  │ │
 │   │                                                                 │ │
 │   │   ┌──────────┐    ┌──────────┐    ┌──────────┐                 │ │
-│   │   │ fnn:alice│◄──►│ fnn:bob  │◄──►│ fnn:carol│  (P2P nội bộ)   │ │
+│   │   │ fnn:alice│◄──►│ fnn:bob  │◄──►│ fnn:carol│  (internal P2P) │ │
 │   │   └────┬─────┘    └────┬─────┘    └────┬─────┘                 │ │
 │   │        │               │               │                       │ │
 │   │        └───────────────┴───────────────┘                       │ │
-│   │                        │ (mỗi fnn kết nối tới CKB devnet)       │ │
+│   │                        │ (each fnn connects to the CKB devnet) │ │
 │   │              ┌──────────▼─────────────┐                         │ │
 │   │              │ CKB devnet container   │  (nervos/ckb v0.207.0,  │ │
-│   │              │ genesis tự bake)       │   không phải offckb)    │ │
+│   │              │ self-baked genesis)    │   not offckb)           │ │
 │   │              └────────────────────────┘                         │ │
 │   └───────────────────────────────────────────────────────────────┘ │
 │                     ▲                                                 │
-│                     │ RPC (chỉ CLI + test-kit gọi vào, qua           │
-│                     │ port map tạm theo run-id hoặc exec trong net)  │
+│                     │ RPC (only the CLI + test-kit call in, through  │
+│                     │ a temporary port map per run-id, or exec inside)│
 │   test-kit (Vitest) ┘  expectPaymentSucceeds() / expectPaymentFails()│
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-## 3. Các thành phần và vai trò
+## 3. Components and their roles
 
-### 3.1 `cli/` — fiber-lab (lớp giao tiếp DUY NHẤT vào cụm node)
-Không ai gọi thẳng JSON-RPC vào từng container. Mọi thao tác đi qua CLI để đảm bảo state được ghi log và reset đúng. Handler mỏng — chỉ parse tham số rồi gọi vào `lib/`.
+### 3.1 `cli/` — fiber-lab (the ONLY entry point into the node cluster)
+Nobody calls JSON-RPC directly into a container. Every operation goes through the CLI so state is logged and reset correctly. Handlers are thin — they only parse arguments and call into `lib/`.
 
-Lệnh (đặc tả đầy đủ ở `api/cli-spec.md`):
-- `fiber-lab up <scenario>` — dựng topology
-- `fiber-lab seed <scenario>` — chạy phần `seed` của kịch bản
-- `fiber-lab reset [run-id]` — teardown + xoá state
-- `fiber-lab logs <run-id>` — in run-log
-- `fiber-lab list` — liệt kê scenario có sẵn + run đang chạy
+Commands (full spec in `api/cli-spec.md`):
+- `fiber-lab up <scenario>` — build the topology
+- `fiber-lab seed <scenario>` — run the scenario's `seed` section
+- `fiber-lab reset [run-id]` — teardown + remove state
+- `fiber-lab logs <run-id>` — print the run-log
+- `fiber-lab list` — list available scenarios + running runs
 
-### 3.2 `topology/` — kịch bản + compose động
-- `scenarios/*.yaml` — mỗi file là 1 kịch bản (tầng 1 settings, dev tự viết được). Schema ở `data-dictionary/scenario-schema.md`.
-- Compose file **sinh động** từ scenario, KHÔNG viết tay cố định — vì số node/tên/port thay đổi theo scenario + run-id.
+### 3.2 `topology/` — scenarios + dynamic compose
+- `scenarios/*.yaml` — each file is one scenario (tier-1 settings, something a developer can write by hand). Schema in `data-dictionary/scenario-schema.md`.
+- The compose file is **generated dynamically** from the scenario, not hand-written and fixed — because the node count/names/ports change per scenario and per run-id.
 
-### 3.3 `lib/` — logic lõi
-- `lib/fiber/client.ts` — wrap `@ckb-ccc/fiber`, gọi RPC tới 1 node cụ thể theo tên
-- `lib/docker/orchestrator.ts` — sinh compose, `up`/`down`, cô lập network theo run-id
-- `lib/scenario/loader.ts` — đọc + validate YAML (zod)
-- `lib/scenario/seeder.ts` — thực thi phần `seed` (mở channel, tạo invoice, kill container...)
-- `lib/runlog/store.ts` — ghi/đọc run-log JSON
+### 3.3 `lib/` — core logic
+- `lib/fiber/client.ts` — wraps `@ckb-ccc/fiber`, calls RPC on a specific node by name
+- `lib/docker/orchestrator.ts` — generates compose, `up`/`down`, isolates the network by run-id
+- `lib/scenario/loader.ts` — reads + validates YAML (zod)
+- `lib/scenario/seeder.ts` — executes the `seed` section (open channels, create invoices, kill containers...)
+- `lib/runlog/store.ts` — write/read the run-log JSON
 
-### 3.4 `test-kit/` — assertion helpers (dùng trong Vitest)
+### 3.4 `test-kit/` — assertion helpers (used from Vitest)
 - `expectPaymentSucceeds(ctx, paymentId)`
 - `expectPaymentFails(ctx, paymentId, reason)`
 - `expectChannelState(ctx, channelId, { status, capacity })`
-- Bên trong **poll** RPC theo interval + timeout (vì FNN không tự báo — xem mục 7).
+- Internally these **poll** RPC on an interval + timeout (because FNN does not push events — see section 7).
 
-### 3.5 `fiber-lab.config.ts` — global config (tầng 2 settings)
-Áp dụng cho MỌI kịch bản, dev chỉnh 1 lần:
+### 3.5 `fiber-lab.config.ts` — global config (tier-2 settings)
+Applies to EVERY scenario, set once by the developer:
 ```typescript
 export default {
   pollIntervalMs: 1000,
@@ -121,71 +121,71 @@ export default {
   dockerNetworkPrefix: "flab",
   fnnImage: "fnn:v0.x.y",      // pinned
   logLevel: "info",
-  keepRunOnFailure: false,      // giữ container khi test fail để debug
+  keepRunOnFailure: false,      // keep the container when a test fails, for debugging
 }
 ```
 
-## 4. Config 2 tầng (phần "settings" cho dev tinh chỉnh)
+## 4. Two-tier config (the "settings" a developer can tune)
 
-| Tầng | Ở đâu | Điều chỉnh cái gì | Ai sửa |
+| Tier | Where | Adjusts what | Who changes it |
 |---|---|---|---|
-| **Tầng 1 — per-scenario** | `scenarios/<name>.yaml` | 1 tình huống cụ thể: số node, channel nào, capacity, amount, expect gì | Dev tạo/sửa file YAML, KHÔNG đụng code |
-| **Tầng 2 — global** | `fiber-lab.config.ts` | Hành vi chung cả hệ thống: timeout, interval poll, prefix, version image | Dev sửa 1 lần, áp dụng toàn bộ |
+| **Tier 1 — per-scenario** | `scenarios/<name>.yaml` | One specific situation: which nodes, which channels, capacity, amount, what to expect | The developer creates/edits YAML files, without touching code |
+| **Tier 2 — global** | `fiber-lab.config.ts` | System-wide behavior: timeout, poll interval, prefix, image version | The developer edits it once, it applies everywhere |
 
-Dev muốn thêm 1 loại lỗi mới → tạo file `.yaml` mới theo schema, không cần sửa CLI. `zod` đảm bảo báo lỗi ngay nếu file sai khuôn.
+A developer who wants to add a new kind of failure creates a new `.yaml` file following the schema, without touching the CLI. `zod` guarantees an immediate, clear error if the file doesn't match the shape.
 
-## 5. Data Flow — `fiber-lab up two-hop-route`
+## 5. Data flow — `fiber-lab up two-hop-route`
 
 ```
-1. CLI đọc scenarios/two-hop-route.yaml
-2. loader.ts validate bằng zod → nếu sai schema: in lỗi rõ, exit 1 (chưa đụng docker)
-3. sinh run-id (VD: ts + random ngắn) → network name = flab_<run-id>
-4. orchestrator.ts sinh compose động: N service fnn (alice/bob/carol) + 1 CKB devnet,
-   tất cả trong network flab_<run-id>, container name có prefix run-id
-5. docker compose up -d → chờ health-check các node sẵn sàng (poll node_info)
-6. cấp CKB qua genesis pre-fund (3 key cố định nạp sẵn trong dev.toml) — không cần faucet runtime
-7. seeder.ts đọc phần `channels` → gọi open_channel alice→bob, bob→carol,
-   chờ channel READY (poll list_channels)
-8. seeder.ts đọc phần `seed` → thực thi (VD send_payment alice→carol amount 100)
-9. store.ts ghi run-log JSON: {runId, scenario, steps[], rpcResponses[], startedAt}
-10. in run-id ra stdout để dev/test-kit dùng tiếp
+1. The CLI reads scenarios/two-hop-route.yaml
+2. loader.ts validates with zod -> on a bad schema: print a clear error, exit 1 (Docker untouched)
+3. generate a run-id (e.g. timestamp + a short random suffix) -> network name = flab_<run-id>
+4. orchestrator.ts generates dynamic compose: N fnn services (alice/bob/carol) + 1 CKB devnet,
+   all on network flab_<run-id>, container names prefixed by the run-id
+5. docker compose up -d -> wait for each node's healthcheck to pass (poll node_info)
+6. fund CKB via genesis pre-funding (3 fixed keys baked into dev.toml) -- no runtime faucet needed
+7. seeder.ts reads the `channels` section -> calls open_channel alice->bob, bob->carol,
+   waits for the channel to be READY (poll list_channels)
+8. seeder.ts reads the `seed` section -> executes it (e.g. send_payment alice->carol amount 100)
+9. store.ts writes the run-log JSON: {runId, scenario, steps[], rpcResponses[], startedAt}
+10. print the run-id to stdout for the developer/test-kit to use next
 ```
 
-## 6. Cô lập theo run-id (tránh dẫm chân nhau)
+## 6. Isolation by run-id (avoiding collisions)
 
-Vấn đề: 2 lần `up` song song (2 terminal, hoặc CI chạy nhiều job) → trùng tên container/port → hỏng.
+Problem: two parallel `up` runs (two terminals, or CI running multiple jobs) -> colliding container/port names -> breakage.
 
-Giải pháp: mỗi lần `up` sinh 1 **run-id** duy nhất. Toàn bộ tài nguyên gắn prefix theo run-id:
+Solution: every `up` generates one unique **run-id**. Every resource is prefixed by the run-id:
 - Docker network: `flab_<run-id>`
-- Container: `flab_<run-id>_alice`, `..._bob`, ...
+- Containers: `flab_<run-id>_alice`, `..._bob`, ...
 - Run-log file: `./.fiber-lab/runs/<run-id>.json`
-- Port map (nếu cần expose tạm cho test-kit): cấp port động, không hardcode
+- Port map (when temporarily exposed for the test-kit): allocated dynamically, never hardcoded
 
-`fiber-lab reset` không tham số → dọn TẤT CẢ run. `reset <run-id>` → chỉ dọn 1 run. (Vai trò tương tự "cơ chế đăng ký app" của FiberGate, nhưng cho "1 lần chạy test" thay vì "1 app".)
+`fiber-lab reset` with no argument -> cleans up EVERY run. `reset <run-id>` -> cleans up only one run. (A role similar to FiberGate's "app registration mechanism", but for "one test run" instead of "one app".)
 
-## 7. FNN không tự báo trạng thái → polling (và đường nâng cấp)
+## 7. FNN does not push status updates -> polling (and an upgrade path)
 
-FNN không push event khi channel/payment đổi trạng thái — phải chủ động hỏi (`list_channels`, `get_invoice`). Vì vậy `test-kit` mặc định **poll** theo `pollIntervalMs` + `pollTimeoutMs` (từ global config).
+FNN does not push an event when a channel's or payment's status changes -- you must actively ask (`list_channels`, `get_invoice`). Because of this, `test-kit` **polls** by default, on `pollIntervalMs` + `pollTimeoutMs` (from the global config).
 
-**Đường nâng cấp (optional, Bước 6):** FNN có RPC `subscribe_store_changes` (module `pubsub`, đã được verify tồn tại thật từ FNN v0.8.1 trong nghiên cứu của Project 1 — xem `project1/.context/architecture/system-design.md` "Phase 2"). Có thể tái dùng kết quả đó để làm test-kit event-driven (chờ đúng event thay vì poll mù), nhanh và ít flaky hơn. KHÔNG bắt buộc cho v1.
+**Upgrade path (optional, step 6):** FNN has a `subscribe_store_changes` RPC (the `pubsub` module, confirmed to really exist as of FNN v0.8.1 in Project 1's research -- see `project1/.context/architecture/system-design.md` "Phase 2"). That result could be reused to build an event-driven test-kit (waiting for the actual event instead of blind polling), which would be faster and less flaky. NOT required for v1.
 
-## 8. Vì sao KHÔNG dùng database 
+## 8. Why NOT use a database
 
-- Test Lab: dữ liệu sống vài phút–vài giờ, mỗi `reset` xoá sạch. **File JSON đủ.**
-- Nếu về sau cần query phức tạp trên run-log → cân nhắc SQLite (vẫn không cần server DB).
+- Test Lab: data lives for minutes to hours, and every `reset` wipes it clean. **A JSON file is enough.**
+- If complex queries over the run-log become necessary later -> consider SQLite (still no DB server needed).
 
-## 9. Bảo mật / cô lập mạng
+## 9. Security / network isolation
 
-- Mọi container `fnn` + CKB devnet chỉ nghe trong docker internal network `flab_<run-id>`, KHÔNG bind port ra host/internet mặc định.
-- Lý do: node test dùng key/tiền devnet giả — nếu lộ port, node lạ kết nối vào phá vỡ topology đã khai báo → sai kết quả test.
-- Chỉ khi test-kit cần gọi RPC từ tiến trình Vitest (ngoài docker) mới cấp port map tạm theo run-id, đóng lại khi reset.
+- Every `fnn` container + the CKB devnet only listens on the internal Docker network `flab_<run-id>`, and is NOT bound to the host/internet by default.
+- Reason: test nodes use fake devnet keys/funds -- if a port were exposed, an unrelated node could connect in and break the declared topology, corrupting test results.
+- A temporary port map per run-id is only opened when the test-kit needs to call RPC from the Vitest process (outside Docker), and is closed again on reset.
 
-## 10. Cấu trúc repo
+## 10. Repo layout
 
 ```
 fiber-test-lab/                          
 ├── cli/
-│   ├── index.ts                         — entry (commander)
+│   ├── index.ts                         — entry point (commander)
 │   └── commands/                        — up.ts, seed.ts, reset.ts, logs.ts, list.ts
 ├── lib/
 │   ├── fiber/client.ts
@@ -194,7 +194,7 @@ fiber-test-lab/
 │   ├── scenario/seeder.ts
 │   └── runlog/store.ts
 ├── topology/
-│   ├── compose.template.ts             — sinh compose động
+│   ├── compose.template.ts             — generates compose dynamically
 │   └── scenarios/
 │       ├── direct-channel.yaml
 │       ├── two-hop-route.yaml
@@ -203,8 +203,8 @@ fiber-test-lab/
 │       └── peer-offline.yaml
 ├── test-kit/
 │   ├── index.ts                        — assertion helpers
-│   └── examples/                       — test mẫu (*.test.ts) minh hoạ dùng thật
-├── .fiber-lab/runs/                    — run-log JSON (gitignore)
+│   └── examples/                       — example tests (*.test.ts) showing real usage
+├── .fiber-lab/runs/                    — run-log JSON (gitignored)
 ├── fiber-lab.config.ts                 — global config
 ├── docs/
 │   ├── scenario-catalog.md
@@ -213,16 +213,16 @@ fiber-test-lab/
 └── tsconfig.json
 ```
 
-## 11. Ranh giới với FiberGate (Project 1) — không trùng lặp
+## 11. Boundary with FiberGate (Project 1) — no overlap
 
 | | FiberGate (P1) | Fiber Test Lab (P3) |
 |---|---|---|
 | Category | 3 — Merchant/Liquidity | 2 — Node/Routing/Diagnostics |
-| Bài toán | Merchant NHẬN thanh toán ổn định | Developer TEST payment/routing lặp lại được |
-| Bề mặt | Web dashboard + REST API + webhook | CLI + file YAML + test-kit |
-| Dữ liệu | PostgreSQL (lâu dài) | File JSON (tạm, reset được) |
-| Số node | 1 node ra thế giới ngoài | Nhiều node nói chuyện với nhau, mạng kín |
-| Môi trường | testnet | CKB devnet local (tự bake, ~offckb) |
-| Phụ thuộc | Không import P3 | Không import P1 |
+| Problem | A merchant RECEIVING payments reliably | A developer TESTING payment/routing reproducibly |
+| Surface | Web dashboard + REST API + webhook | CLI + YAML files + test-kit |
+| Data | PostgreSQL (long-lived) | JSON files (temporary, resettable) |
+| Node count | 1 node facing the outside world | Multiple nodes talking to each other, a closed network |
+| Environment | testnet | a local CKB devnet (self-baked, offckb-like) |
+| Dependency | Does not import P3 | Does not import P1 |
 
-Quy tắc: repo riêng, không import `@fibergate/sdk`, không cần FiberGate chạy. Điểm chung DUY NHẤT được phép: cùng dùng SDK chính thức `@ckb-ccc/fiber` (không phải chia sẻ code, chỉ là cùng chọn 1 thư viện chuẩn).
+Rule: separate repos, no importing `@fibergate/sdk`, no need for FiberGate to be running. The ONLY shared point allowed: both use the official `@ckb-ccc/fiber` SDK (not shared code, just the same choice of a standard library).

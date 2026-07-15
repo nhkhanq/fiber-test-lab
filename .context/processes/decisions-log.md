@@ -7,71 +7,71 @@ tags: [decisions, architecture, scope]
 
 # Decisions Log — Fiber Test Lab
 
-> Ghi lại các quyết định đã được **human xác nhận**.
-> Claude Code cập nhật file này **sau khi** human confirm trong hội thoại.
-> KHÔNG tự thêm khi chưa có xác nhận rõ ràng.
+> Records decisions that have been **confirmed by a human**.
+> Claude Code updates this file **after** the human confirms it in conversation.
+> Do NOT add an entry without a clear confirmation.
 >
-> Format: `[YYYY-MM-DD] **Topic**: decision — Lý do: why`
+> Format: `[YYYY-MM-DD] **Topic**: decision — Reason: why`
 
 ---
 
 ## Architecture & Tech Stack
 
-[2026-07-04] **Chọn Category 2**: Nộp Test Lab theo Category 2 (Node/Routing/Diagnostics), Test Lab theo Category 2 tạo 2 sản phẩm 2 đối tượng khác nhau (merchant vs developer/operator), portfolio đa dạng hơn.
+[2026-07-04] **Chose Category 2**: Submit Test Lab under Category 2 (Node/Routing/Diagnostics); doing so alongside Test Lab creates 2 products for 2 different audiences (merchant vs. developer/operator), giving a more varied portfolio.
 
-[2026-07-04] **CLI-first**: Bề mặt sản phẩm là CLI + file YAML + test-kit, KHÔNG có dashboard web — Lý do: đối tượng là developer (quen terminal/config); tiết kiệm thời gian hackathon.
+[2026-07-04] **CLI-first**: The product surface is the CLI + YAML files + test-kit, with NO web dashboard — Reason: the audience is developers (comfortable with a terminal/config); it saves hackathon time.
 
-[2026-07-04] **Không dùng database, dùng file JSON**: Run-log lưu file JSON, không Postgres — Lý do: dữ liệu Test Lab sống vài phút–vài giờ, mỗi reset xoá sạch; thêm DB là over-engineering, đi ngược mục tiêu "local, nhẹ, 1 lệnh". Nếu cần query phức tạp sau này → cân nhắc SQLite (vẫn không cần DB server).
+[2026-07-04] **No database, use JSON files**: The run-log is stored as a JSON file, not Postgres — Reason: Test Lab's data lives for minutes to hours and every reset wipes it clean; adding a DB would be over-engineering and works against the goal of "local, lightweight, one command". If complex querying is needed later -> consider SQLite (still no DB server needed).
 
-[2026-07-04] **Local devnet, không testnet**: Chạy trên CKB dev chain local — Lý do: mục tiêu là môi trường lặp lại được và kiểm soát được; testnet công cộng chậm/chia sẻ/không ép được lỗi. Trade-off (devnet ≠ mainnet) chấp nhận và document.
-  > **Cập nhật sau khi đọc doc thật (xem mục "Verified from official docs"):** CKB dev chain đến từ docker-compose của `fiber-demo-startup` (đã dockerized sẵn), KHÔNG phải `offckb` standalone như giả định ban đầu. `offckb` vẫn có thể dùng thay thế nếu cần, nhưng đường đã-được-chứng-minh là compose của demo-startup.
+[2026-07-04] **A local devnet, not a testnet**: Run on a local CKB dev chain — Reason: the goal is a reproducible, controllable environment; the public testnet is slow/shared/cannot be forced into failure on demand. The trade-off (devnet ≠ mainnet) is accepted and documented.
+  > **Updated after reading the real docs (see "Verified from official docs" below):** the CKB dev chain comes from `fiber-demo-startup`'s docker-compose (already dockerized), NOT standalone `offckb` as originally assumed. `offckb` can still be used as a fallback if needed, but the proven path is demo-startup's compose.
 
-[2026-07-04] **Node THẬT, không mock giao thức**: Dùng FNN binary thật trong container, không giả lập protocol — Lý do: kết quả test phải phản ánh hành vi Fiber thật; mock giao thức sẽ làm test vô nghĩa.
+[2026-07-04] **Real nodes, no protocol mocking**: Use the real FNN binary inside containers, do not simulate the protocol — Reason: test results must reflect real Fiber behavior; mocking the protocol would make the tests meaningless.
 
-[2026-07-04] **Cùng dùng `@ckb-ccc/fiber`**: Không coi là trùng lặp — Lý do: đây là SDK chính thức hackathon khuyến nghị; cùng chọn 1 thư viện chuẩn khác với việc chia sẻ code/UI. Repo vẫn độc lập hoàn toàn.
+[2026-07-04] **Sharing use of `@ckb-ccc/fiber`**: Not considered a duplication — Reason: this is the official SDK the hackathon recommends; choosing the same standard library is different from sharing code/UI. The repos remain fully independent.
 
-[2026-07-04] **Compose sinh động, không viết tay cố định**: `topology/compose.template.ts` sinh docker-compose từ scenario + run-id — Lý do: số node/tên/port thay đổi theo scenario và cần cô lập theo run-id, không thể hardcode 1 file compose.
+[2026-07-04] **Dynamic compose, not a fixed hand-written file**: `topology/compose.template.ts` generates docker-compose from the scenario + run-id — Reason: node count/names/ports change per scenario and must be isolated by run-id, so a single hardcoded compose file is not possible.
 
-[2026-07-04] **Cô lập theo run-id**: Mỗi `up` sinh run-id, mọi tài nguyên gắn prefix — Lý do: cho phép chạy song song (nhiều terminal/CI job) không dẫm chân nhau; đóng vai trò tương tự "cơ chế đăng ký" của FiberGate nhưng cho "1 lần chạy".
+[2026-07-04] **Isolation by run-id**: Every `up` generates a run-id, and every resource is prefixed by it — Reason: this allows parallel runs (multiple terminals/CI jobs) without collisions; it plays a role similar to FiberGate's "registration mechanism" but for "one run" instead.
 
 ---
 
 ## Scope
 
-Test Lab nền tảng kỹ thuật đơn giản hơn (devops/scripting, không cần routing/CCH sâu).
+Test Lab's underlying technical footprint is simpler (devops/scripting, no need for deep routing/CCH work).
 
-[2026-07-04] **3 kịch bản must-have + 2 nếu kịp**: Must-have `direct-channel`, `two-hop-route`, `insufficient-capacity`; nếu kịp thêm `expired-invoice`, `peer-offline` — Lý do: 3 cái đầu đủ chứng minh giá trị cốt lõi (route + lỗi phổ biến nhất); checkpoint cuối Ngày 5 để quyết cắt scope.
+[2026-07-04] **3 must-have scenarios + 2 if time allows**: Must-have: `direct-channel`, `two-hop-route`, `insufficient-capacity`; if time allows, add `expired-invoice`, `peer-offline` — Reason: the first three are enough to prove the core value (routing + the most common failures); a checkpoint at the end of Day 5 decides whether to cut scope.
 
-[2026-07-04] **Bước 0 (thực hành tay) bắt buộc trước khi code**: Cài fnn, tự tay open_channel/send_payment/list_channels/close_channel trên testnet 1 lần — Lý do: chưa hiểu 4 lệnh lõi khi gõ tay thì không biết CLI đang tự động hoá đúng cái gì.
+[2026-07-04] **Step 0 (hands-on practice) is mandatory before writing code**: Install fnn, manually open_channel/send_payment/list_channels/close_channel on the testnet once — Reason: without understanding the 4 core commands by hand, you cannot tell whether the CLI is automating them correctly.
 
 ---
 
 ## Verified from official docs (2026-07-04)
 
-> Đối chiếu với tài liệu onboard hackathon (github.com/RetricSu/fiber-hackathon-docs) + fiber.world/docs. Đây là SỰ THẬT đã xác minh qua doc, thay thế các giả định trước đó.
+> Cross-checked against the hackathon onboarding docs (github.com/RetricSu/fiber-hackathon-docs) + fiber.world/docs. These are TRUTHS confirmed from the docs, replacing earlier assumptions.
 
-[2026-07-04] **Build ON TOP of `fiber-demo-startup`, KHÔNG dựng docker từ đầu**: Repo chính thức `HappySonnyDev/fiber-demo-startup` (branch `demo-0.8`) đã cung cấp docker-compose với CKB dev chain local + nhiều Fiber node (1 bootnode + 3 node + transfer container cấp tiền) — Lý do: đây là phần hạ tầng rủi ro/tốn thời gian nhất, đã được chứng minh chạy được; fork/xây trên nó giảm rủi ro tiến độ lớn. Test Lab tập trung vào lớp CHƯA có: automated channel-opening (seeder), scenario YAML, assertion (test-kit), CLI chạy named scenario — chính là những thứ demo-startup tự nêu là "còn thiếu" (nó là "interactive learning", không phải "automated testing").
+[2026-07-04] **Build ON TOP of `fiber-demo-startup`, NOT Docker from scratch**: The official repo `HappySonnyDev/fiber-demo-startup` (branch `demo-0.8`) already provides a docker-compose with a local CKB dev chain + several Fiber nodes (1 bootnode + 3 nodes + a funding transfer container) — Reason: this is the riskiest, most time-consuming infrastructure layer, and it is already proven to work; forking/building on it greatly reduces schedule risk. Test Lab focuses on the layer that does NOT yet exist: automated channel-opening (the seeder), scenario YAML, assertions (test-kit), a CLI to run a named scenario — exactly what demo-startup itself states is "missing" (it is "interactive learning", not "automated testing").
 
-[2026-07-04] **Định vị so với fiber-demo-startup**: demo-startup = môi trường học tương tác (mở channel/trả tiền qua UI thủ công); Test Lab = biến nó thành test tự động lặp lại được (scenario + assertion + CLI) — Lý do: khác mục đích rõ ràng, không phải bản sao; câu chuyện submission mạnh hơn: "không phát minh lại hạ tầng, làm nó test được".
+[2026-07-04] **Positioning relative to fiber-demo-startup**: demo-startup = an interactive learning environment (opening channels/paying manually through a UI); Test Lab = turns it into reproducible automated testing (scenarios + assertions + a CLI) — Reason: a clearly different purpose, not a copy; a stronger submission story: "not reinventing the infrastructure, making it testable".
 
-[2026-07-05] **Pin FNN 0.8.0 (binary official + Dockerfile tự viết)**: Dùng FNN version 0.8.0 (stable), tải binary official từ GitHub release (`fnn_v0.8.0-x86_64-linux.tar.gz`) vào Dockerfile mỏng tự viết — KHÔNG dùng image official (chỉ có từ 0.9.0-rc, chưa stable) và KHÔNG compile từ source. — Lý do: 0.8.0 đã verify toàn bộ ở E0 (RPC/params/error/balance), giữ determinism; 0.9.0 mới chỉ có release candidate; binary official có sẵn nên không cần build lâu như demo-startup.
+[2026-07-05] **Pin FNN 0.8.0 (the official binary + a hand-written Dockerfile)**: Use FNN version 0.8.0 (stable), downloading the official binary from the GitHub release (`fnn_v0.8.0-x86_64-linux.tar.gz`) into a thin, hand-written Dockerfile — NOT using the official image (only available from 0.9.0-rc, not yet stable) and NOT compiling from source. — Reason: 0.8.0 was fully verified in E0 (RPC/params/errors/balances), which preserves determinism; 0.9.0 only has a release candidate so far; the official binary is readily available, so no need for a long build like demo-startup's.
 
-[2026-07-05] **CKB devnet: genesis custom nhúng sẵn fiber-scripts**: Dựng CKB devnet với genesis nhúng sẵn Fiber on-chain scripts (FundingLock/CommitmentLock/simple_udt) + tiền cấp sẵn, config tự viết (tham khảo demo-startup, không copy). — Lý do: FNN không chạy trên devnet trống; genesis-custom cho startup nhanh nhất khi `up`, tránh bước deploy script runtime; chấp nhận config genesis phức tạp hơn.
+[2026-07-05] **CKB devnet: a custom genesis with fiber-scripts baked in**: Build the CKB devnet with a genesis that has the Fiber on-chain scripts baked in (FundingLock/CommitmentLock/simple_udt) plus pre-funded accounts, using a hand-written config (informed by demo-startup, not copied). — Reason: FNN cannot run on an empty devnet; a custom genesis gives the fastest startup on `up`, avoiding a runtime script-deployment step; the trade-off is a more complex genesis config.
 
-[2026-07-05] **Reimplement compose riêng, KHÔNG fork file demo-startup**: fiber-demo-startup không có file LICENSE (kiểm tra E1-1: GitHub API trả license=null; nervosnetwork/fiber cũng không có license rõ ràng) → "no license" = all-rights-reserved, về nguyên tắc không được fork/redistribute. Quyết định: Test Lab **tự viết** docker-compose + Dockerfile của mình (học cách demo-startup làm nhưng code mới), không copy file của họ. — Lý do: an toàn pháp lý; vẫn giữ được kiến thức topology/fund-flow đã học tay ở E0. Hệ quả: E1-3/E3-3 chuyển từ "tham số hoá compose demo-startup" sang "sinh compose động của riêng Test Lab" (nguyên tắc run-id isolation giữ nguyên; cân nhắc offckb cho CKB devnet như spec đã nêu là phương án thay thế).
+[2026-07-05] **Reimplement compose separately, do NOT fork demo-startup's files**: fiber-demo-startup has no LICENSE file (checked in E1-1: the GitHub API returns license=null; nervosnetwork/fiber also has no clear license) -> "no license" means all-rights-reserved, so forking/redistributing is not permitted in principle. Decision: Test Lab **writes its own** docker-compose + Dockerfile (learning from how demo-startup does it, but new code), without copying their files. — Reason: legal safety; still retains the topology/fund-flow knowledge learned by hand in E0. Consequence: E1-3/E3-3 shift from "parameterizing demo-startup's compose" to "generating Test Lab's own dynamic compose" (the run-id isolation principle is unchanged; offckb remains a documented fallback option for the CKB devnet as the spec already notes).
 
-[2026-07-04] **`fnn-cli` dùng cấu trúc subcommand**: Thực tế là `fnn-cli info`, `fnn-cli peer list_peers`, `fnn-cli channel list_channels` — KHÔNG phải lệnh phẳng `fnn-cli open_channel` như giả định trước. Release FNN gồm 2 binary: `fnn` (HTTP RPC + node) và `fnn-cli` (quản lý CLI).
+[2026-07-04] **`fnn-cli` uses a subcommand structure**: In reality it is `fnn-cli info`, `fnn-cli peer list_peers`, `fnn-cli channel list_channels` — NOT flat commands like `fnn-cli open_channel` as previously assumed. An FNN release includes 2 binaries: `fnn` (HTTP RPC + node) and `fnn-cli` (the management CLI).
 
-[2026-07-04] **Nguồn RPC chính thức**: fiber.world/docs/api-reference (RPC reference) + các quick-start: run-a-node, basic-transfer, transfer-stablecoin, multi-hop-transfer (đúng scenario two-hop-route). FNN source: github.com/nervosnetwork/fiber. — Dùng làm nguồn cho E0-4 (RPC notebook) thay vì đoán.
+[2026-07-04] **Official RPC source**: fiber.world/docs/api-reference (the RPC reference) + the quick-starts: run-a-node, basic-transfer, transfer-stablecoin, multi-hop-transfer (exactly the two-hop-route scenario). FNN source: github.com/nervosnetwork/fiber. — Used as the source for E0-4 (the RPC notebook) instead of guessing.
 
 ---
 
 ## Open Questions
 
-> Những vấn đề chưa chốt. Xoá dòng khi đã có quyết định và chuyển lên trên.
+> Unresolved issues. Remove a line once it has a decision and move it above.
 
-- [~] Danh sách `ErrorCategory` chính xác — verify 1 phần (E0-5, 2026-07-05): `insufficient_outbound` = raw error code -32000, message "Failed to build route, Insufficient balance: max outbound liquidity ... insufficient". Còn lại (no_route_found, invoice_expired, peer_offline...) chưa ép. Chi tiết: docs/hands-on/rpc-notebook.md §8.
-- [x] ~~FNN có chạy được trong container Docker không~~ — ĐÃ RÕ: `fiber-demo-startup` đã dockerize FNN thành công (multi-node + CKB dev chain). Việc còn lại chỉ là clone + verify chạy được trên máy mình (E1).
-- [x] ~~Có cần build image FNN riêng không~~ — ĐÃ RÕ: dùng Dockerfile/compose có sẵn của demo-startup làm điểm khởi đầu.
-- [x] ~~Tên RPC method chính xác~~ — ĐÃ RÕ (E0, 2026-07-05): method là `node_info` (KHÔNG phải get_node_info), `shutdown_channel` (KHÔNG phải close_channel). `open_channel` params dùng `pubkey` + `funding_amount` (hex shannon). Số response là hex; `result:null`=OK. Đầy đủ chữ ký: docs/hands-on/rpc-notebook.md.
-- [x] ~~`fiber-demo-startup` license cho phép fork/build-on-top không~~ — ĐÃ RÕ (2026-07-05): KHÔNG có license → quyết định reimplement compose riêng, không fork (xem quyết định 2026-07-05 phía trên).
+- [~] The exact `ErrorCategory` list — partially verified (E0-5, 2026-07-05): `insufficient_outbound` = raw error code -32000, message "Failed to build route, Insufficient balance: max outbound liquidity ... insufficient". The rest (no_route_found, invoice_expired, peer_offline...) not yet forced. Detail: docs/hands-on/rpc-notebook.md section 8.
+- [x] ~~Can FNN run inside a Docker container~~ — RESOLVED: `fiber-demo-startup` has already dockerized FNN successfully (multi-node + a CKB dev chain). All that remains is cloning + verifying it runs on our own machine (E1).
+- [x] ~~Do we need to build our own FNN image~~ — RESOLVED: use demo-startup's existing Dockerfile/compose as the starting point.
+- [x] ~~The exact RPC method names~~ — RESOLVED (E0, 2026-07-05): the method is `node_info` (NOT get_node_info), `shutdown_channel` (NOT close_channel). `open_channel` params use `pubkey` + `funding_amount` (hex shannon). Numeric responses are hex; `result:null` = OK. Full signatures: docs/hands-on/rpc-notebook.md.
+- [x] ~~Does `fiber-demo-startup`'s license allow forking/building on top~~ — RESOLVED (2026-07-05): it has NO license -> decided to reimplement our own compose instead of forking (see the 2026-07-05 decision above).
