@@ -40,7 +40,7 @@ fiber-test-lab/
 ├── topology/          — docker-compose + scenario YAML files
 ├── cli/               — the fiber-lab CLI (commander)
 ├── test-kit/          — assertion helpers for Vitest
-├── lib/               — the Fiber RPC client wrapper, Docker orchestration, run-log
+├── lib/               — the Fiber RPC client wrapper, Docker orchestration, run-log, run viewer
 ├── fiber-lab.config.ts — global config (tier-2 settings)
 └── docs/              — scenario-catalog.md, README
 ```

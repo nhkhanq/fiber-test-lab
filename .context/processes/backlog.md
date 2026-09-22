@@ -202,9 +202,10 @@ tags: [backlog, tasks, tickets]
 **E9-6** · Diff view: two runs of the same scenario side by side · est 2
 - AC: differences highlighted; this is what makes the determinism claim visible rather than merely asserted.
 
-**E9-7** (partial) · Docs: README section + a screenshot · est 1
-- Done: README gained the `ui` command, `logs --html`, and a "Run viewer" section.
-- Left: a screenshot of the viewer for the README — needs a browser, so a human has to take it.
+**E9-7** ✅ · Docs: README section + a screenshot · est 1
+- AC: README has the `ui` command, `logs --html` and a "Run viewer" section with screenshots of
+  both themes (`docs/images/`, captured with headless Chrome); `docs/scenario-catalog.md` points at
+  the viewer; `CHANGELOG.md` records v1.1.0.
 
 ---
 

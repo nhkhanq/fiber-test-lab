@@ -186,13 +186,17 @@ FNN does not push an event when a channel's or payment's status changes -- you m
 fiber-test-lab/                          
 ├── cli/
 │   ├── index.ts                         — entry point (commander)
-│   └── commands/                        — up.ts, seed.ts, reset.ts, logs.ts, list.ts
+│   └── commands/                        — up.ts, seed.ts, reset.ts, logs.ts, list.ts, ui.ts
 ├── lib/
 │   ├── fiber/client.ts
 │   ├── docker/orchestrator.ts
 │   ├── scenario/loader.ts
 │   ├── scenario/seeder.ts
-│   └── runlog/store.ts
+│   ├── runlog/store.ts
+│   └── report/                          — the run viewer (added v1.1.0)
+│       ├── model.ts                     — pure RunLog -> ReportModel
+│       ├── render.ts                    — one self-contained HTML document
+│       └── server.ts                    — the loopback-only `fiber-lab ui` server
 ├── topology/
 │   ├── compose.template.ts             — generates compose dynamically
 │   └── scenarios/

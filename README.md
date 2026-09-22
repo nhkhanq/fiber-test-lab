@@ -285,22 +285,36 @@ Serves the run viewer on `127.0.0.1` — never on `0.0.0.0`, because a run-log c
 pubkeys, container names and every raw RPC of the run. With no `--port` it takes a free
 ephemeral port and prints the URL. Exits `2` if the port you asked for is taken.
 
-The page lists every run in `.fiber-lab/runs/` and links to each report. A report opened this
-way polls its own run-log every two seconds and reloads when it grows, so you can start
-`fiber-lab up` in one terminal and watch the topology and RPC calls fill in.
+The page lists every run in `.fiber-lab/runs/` and links to each report. A report opened this way
+polls its own run-log once a second and reloads when anything visible changes, so you can start
+`fiber-lab up` in one terminal and watch the run build: `docker_up` carries compose's own progress
+lines, `wait_ready` counts containers as they go healthy, `open_channel` names the stage it is in.
+
+Because the page only reloads when the run-log changes, a finished run's tab will not pick up
+changes to the viewer's own code — hard-refresh while working on it.
 
 ## Run viewer
+
+![The run viewer: stat tiles, a channel topology graph with a scrubber, a step timeline and an RPC table](docs/images/run-viewer.png)
 
 The same report renders two ways: `logs --html` writes it to a file, `ui` serves it live. Both
 show
 
-- a **topology graph** — one SVG edge per channel, where the thick segment is the left node's
-  local balance and the dot marks the split, so you can see which way the liquidity sits; the
-  edge along the payment path is highlighted;
+- a **topology graph** — one SVG edge per channel, split where the liquidity actually sits. Each
+  segment wears the colour of the node holding it (colour follows the node, not the side of the
+  edge, so a node keeps its colour across every channel), both amounts are labelled, and a packet
+  animates along the reconstructed payment path. A scrubber below the graph walks the run
+  snapshot by snapshot — arrow keys work too — so you can watch the balances move;
 - a **step timeline** — every seed step as a bar, which is usually how you find out that a run
   spent most of its time waiting for a channel to reach `ChannelReady`;
-- an **RPC table** — every call with its duration, filterable by node, by method, by text, or
-  down to errors only, and expandable to the raw params and response.
+- an **RPC table** — every call with a latency bar and duration, filterable by node, by method, by
+  text, or down to errors only, and expandable to the raw params and response;
+- **stat tiles** for status, expectation, duration, call count and slowest call.
+
+The palette is the dataviz reference palette, checked with its validator across all node pairs in
+both light and dark mode (worst CVD ΔE 9.2 / 9.4). Status never rides on colour alone — every step
+carries a glyph and its text — and the channel balances are repeated as a table under the graph,
+which is what the contrast rule requires for the lighter hues.
 
 Two properties it holds on purpose:
 
@@ -313,8 +327,22 @@ Two properties it holds on purpose:
   It opens over `file://`, so you can archive it as a CI artifact or attach it to an issue
   without needing a server to read it back.
 
+Dark mode is not an automatic flip of the light theme — its colours are chosen for the dark
+surface and validated against it:
+
+![The same report in dark mode](docs/images/run-viewer-dark.png)
+
 A run-log written before the viewer existed still renders; it just has no topology graph and no
-RPC durations, since `channels` and `durationMs` were added on 2026-09-22.
+RPC durations, since `channels` and `durationMs` were added in v1.1.0.
+
+To render a run-log from your own code rather than through the CLI:
+
+```typescript
+import { buildReportModel, renderReport, RunLogStore } from "fiber-test-lab/report"
+
+const log = await RunLogStore.load(runId)
+await writeFile("report.html", renderReport(buildReportModel(log)))
+```
 
 ### list
 

@@ -49,6 +49,9 @@ export interface ReportStep {
   running: boolean;
   /** What the step is doing right now, while it runs (a compose progress line, a stage name). */
   progress: string | null;
+  /** The topology as this step left it — empty unless the step carried a channel snapshot.
+   *  This is what the viewer's scrubber steps through. */
+  edges: ReportEdge[];
   input: unknown;
   result: unknown;
   summary: string;
@@ -281,6 +284,7 @@ function buildSteps(log: RunLog): ReportStep[] {
       ok: stepOk(step),
       running,
       progress: running ? stepProgress(step) : null,
+      edges: buildEdges(step.channels ?? []),
       input: step.input,
       result: step.result,
       summary: describeStep(step),
@@ -312,10 +316,22 @@ export function buildReportModel(log: RunLog): ReportModel {
   const lastWithChannels = [...steps].reverse().find((s) => s.channels.length > 0);
   const edges = buildEdges(lastWithChannels?.channels ?? []);
 
-  const payment = [...log.steps].reverse().find((s) => s.action === "send_payment");
-  const paymentInput = (payment?.input ?? null) as Record<string, unknown> | null;
-  if (paymentInput && typeof paymentInput.from === "string" && typeof paymentInput.to === "string") {
-    markPaymentPath(edges, paymentInput.from, paymentInput.to);
+  // Mark the path on every frame the scrubber can land on, so the highlight follows the payment
+  // rather than only appearing on the final state.
+  const paymentOf = (step: StepRecord): { from: string; to: string } | null => {
+    if (step.action !== "send_payment") return null;
+    const input = (step.input ?? null) as Record<string, unknown> | null;
+    if (input === null || typeof input.from !== "string" || typeof input.to !== "string") return null;
+    return { from: input.from, to: input.to };
+  };
+
+  const lastPayment = [...log.steps].reverse().map(paymentOf).find((p) => p !== null) ?? null;
+  if (lastPayment !== null) markPaymentPath(edges, lastPayment.from, lastPayment.to);
+
+  let seenPayment: { from: string; to: string } | null = null;
+  for (let i = 0; i < steps.length; i++) {
+    seenPayment = paymentOf(log.steps[i]!) ?? seenPayment;
+    if (seenPayment !== null) markPaymentPath(steps[i]!.edges, seenPayment.from, seenPayment.to);
   }
 
   const rpcCalls = buildRpc(log);

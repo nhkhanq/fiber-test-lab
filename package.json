@@ -1,6 +1,6 @@
 {
   "name": "fiber-test-lab",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "description": "Fully-local, one-command test environment for Fiber Network payment/routing scenarios (CLI + YAML scenarios + test-kit).",
   "keywords": [
@@ -30,9 +30,11 @@
     "fiber-lab": "cli/index.ts"
   },
   "exports": {
-    "./test-kit": "./test-kit/index.ts"
+    "./test-kit": "./test-kit/index.ts",
+    "./report": "./lib/report/index.ts"
   },
   "files": [
+    "CHANGELOG.md",
     "cli",
     "lib",
     "test-kit",
@@ -44,6 +46,7 @@
   ],
   "scripts": {
     "lab": "tsx cli/index.ts",
+    "ui": "tsx cli/index.ts ui --open",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

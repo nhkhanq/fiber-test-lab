@@ -24,6 +24,15 @@ Danh mục scenario của Fiber Test Lab kèm **kết quả verify thật** và 
 
 Gossip interval hạ xuống **2000ms** (mặc định FNN 60s) để multi-hop route lan nhanh & tất định — xem E5-2.
 
+## Xem lại một run
+
+Mỗi run ghi ra `.fiber-lab/runs/<run-id>.json`. Xem trực quan:
+
+- `fiber-lab ui` — mở viewer ở `127.0.0.1`, tự cập nhật trong lúc `up` đang chạy
+- `fiber-lab logs <run-id> --html` — xuất một file HTML tự chứa, mở được bằng `file://`, dùng làm artifact CI
+
+Viewer chỉ **đọc** run-log, không gọi RPC vào node — sau `reset` container đã mất, run-log là bản ghi duy nhất còn lại.
+
 ## Giới hạn
 
 - **Tối đa 3 node/scenario** — genesis pre-fund đúng 3 account (10 tỷ CKB/node), cũng là mức hợp lý cho 1 máy.
