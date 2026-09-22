@@ -1,7 +1,7 @@
 ---
 type: backlog
 version: 1.0
-last_updated: 2026-07-04
+last_updated: 2026-09-22
 tags: [backlog, tasks, tickets]
 ---
 
@@ -171,7 +171,45 @@ tags: [backlog, tasks, tickets]
 
 ---
 
+## EPIC E9 — GUI: read-only run viewer (post-hackathon)
+
+> Scope reopened on 2026-09-22 (see decisions-log): read-only only. The viewer's sole data source is
+> `.fiber-lab/runs/*.json` — it never calls FNN RPC and never imports the orchestrator, because after a
+> `reset` the containers are gone and the run-log is the only surviving record. Stack: vanilla TS + inline
+> SVG, no bundler. `--html` output is always ONE self-contained file, never a folder.
+
+**E9-1** ✅ · Run-log: optional `durationMs` on `RpcRecord`, optional `channels` snapshot on `StepRecord` · est 2
+- AC: both fields optional so existing run-logs still parse; `.context/data-dictionary/scenario-schema.md` updated.
+- Why: without `durationMs` there is no latency view; without a channel snapshot the topology graph has to be
+  reverse-engineered out of `list_channels` responses scattered through `rpcCalls`, which is brittle.
+- **Owner decision needed** — touches the data-dictionary.
+
+**E9-2** ✅ · `lib/report/model.ts` — derive a view-model from a `RunLog` · est 2
+- AC: pure function `RunLog -> ReportModel` (nodes + channel edges, step timeline with offsets from `steps[].at`,
+  RPC index grouped by node/method, error rows tagged with `ErrorCategory`). No I/O, unit-testable.
+
+**E9-3** ✅ · `lib/report/render.ts` — self-contained HTML · est 3
+- AC: `ReportModel -> string`; inline SVG topology graph (capacity + local/remote balance per edge, payment path
+  highlighted), step timeline, filterable RPC table. Opens over `file://` with no network access.
+
+**E9-4** ✅ · `logs --html [path]` wiring · est 1
+- AC: writes the file, prints the path, issues no RPC and touches no container.
+
+**E9-5** ✅ · `fiber-lab ui [--port] [--open]` — local server · est 3
+- AC: binds 127.0.0.1 only; lists runs; re-reads the run-log on an interval so a live `up` fills in; exit 2 on a
+  taken port. Reuses E9-3's renderer — same view-model, different data loading.
+
+**E9-6** · Diff view: two runs of the same scenario side by side · est 2
+- AC: differences highlighted; this is what makes the determinism claim visible rather than merely asserted.
+
+**E9-7** (partial) · Docs: README section + a screenshot · est 1
+- Done: README gained the `ui` command, `logs --html`, and a "Run viewer" section.
+- Left: a screenshot of the viewer for the README — needs a browser, so a human has to take it.
+
+---
+
 ## Total estimate
 
 - Must-have (E0–E7): ~65 points
+- E9 (GUI, post-hackathon): ~14 points
 - Day-5 scope-cut checkpoint: if E1 isn't done → drop E5-2/E8, keep `direct-channel` + `insufficient-capacity`.

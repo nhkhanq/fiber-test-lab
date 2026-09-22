@@ -10,6 +10,19 @@ export const RpcRecordSchema = z.object({
   response: z.unknown().nullable().default(null),
   error: z.unknown().nullable().default(null),
   at: z.string(),
+  durationMs: z.number().optional(),
+});
+
+/** One node's view of one channel, as of a step. Balances are decimal strings in base units
+ *  (shannon for CKB) — FNN returns hex and UDT amounts can exceed Number.MAX_SAFE_INTEGER. */
+export const ChannelSnapshotSchema = z.object({
+  node: z.string(),
+  peer: z.string().nullable().default(null),
+  channelId: z.string(),
+  state: z.string(),
+  asset: z.string().default("CKB"),
+  localBalance: z.string().nullable().default(null),
+  remoteBalance: z.string().nullable().default(null),
 });
 
 export const StepRecordSchema = z.object({
@@ -17,6 +30,7 @@ export const StepRecordSchema = z.object({
   input: z.unknown().nullable().default(null),
   result: z.unknown().nullable().default(null),
   at: z.string(),
+  channels: z.array(ChannelSnapshotSchema).optional(),
 });
 
 export const NodeRecordSchema = z.object({
@@ -43,6 +57,7 @@ export const RunLogSchema = z.object({
 export type RunLog = z.infer<typeof RunLogSchema>;
 export type RpcRecord = z.infer<typeof RpcRecordSchema>;
 export type StepRecord = z.infer<typeof StepRecordSchema>;
+export type ChannelSnapshot = z.infer<typeof ChannelSnapshotSchema>;
 export type NodeRecord = z.infer<typeof NodeRecordSchema>;
 export type RunStatus = z.infer<typeof RunStatusSchema>;
 
@@ -93,6 +108,7 @@ export class RunLogStore {
     response?: unknown;
     error?: unknown;
     at: string;
+    durationMs?: number;
   }): void => {
     this.#log.rpcCalls.push({
       node: record.node,
@@ -101,11 +117,23 @@ export class RunLogStore {
       response: record.response ?? null,
       error: record.error === undefined ? null : serializeError(record.error),
       at: record.at,
+      ...(record.durationMs === undefined ? {} : { durationMs: record.durationMs }),
     });
   };
 
-  recordStep(action: string, input: unknown = null, result: unknown = null): void {
-    this.#log.steps.push({ action, input, result, at: new Date().toISOString() });
+  recordStep(
+    action: string,
+    input: unknown = null,
+    result: unknown = null,
+    channels?: ChannelSnapshot[],
+  ): void {
+    this.#log.steps.push({
+      action,
+      input,
+      result,
+      at: new Date().toISOString(),
+      ...(channels === undefined ? {} : { channels }),
+    });
   }
 
   addNode(node: NodeRecord): void {

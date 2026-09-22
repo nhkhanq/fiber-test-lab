@@ -6,6 +6,7 @@ import { registerListCommand } from "./commands/list";
 import { registerLogsCommand } from "./commands/logs";
 import { registerResetCommand } from "./commands/reset";
 import { registerSeedCommand } from "./commands/seed";
+import { registerUiCommand } from "./commands/ui";
 import { registerUpCommand } from "./commands/up";
 
 const program = new Command();
@@ -19,6 +20,7 @@ registerUpCommand(program);
 registerResetCommand(program);
 registerLogsCommand(program);
 registerSeedCommand(program);
+registerUiCommand(program);
 
 program.parseAsync(process.argv).catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));

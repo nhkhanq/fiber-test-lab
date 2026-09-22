@@ -1,6 +1,10 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import type { Command } from "commander";
-import { EXIT_CODES } from "../../lib/constants";
+import { EXIT_CODES, RUNS_DIR } from "../../lib/constants";
 import { CliError } from "../../lib/errors";
+import { buildReportModel } from "../../lib/report/model";
+import { renderReport } from "../../lib/report/render";
 import { RunLogStore, type RunLog } from "../../lib/runlog/store";
 
 function printSummary(log: RunLog): void {
@@ -30,19 +34,39 @@ function printRpc(log: RunLog): void {
   }
 }
 
+async function writeHtml(log: RunLog, target: string | true): Promise<string> {
+  const path = typeof target === "string" ? target : join(RUNS_DIR, `${log.runId}.html`);
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, renderReport(buildReportModel(log)), "utf8");
+  return path;
+}
+
 export function registerLogsCommand(program: Command): void {
   program
     .command("logs <run-id>")
-    .description("Print a run-log: step/status summary (default), all RPCs (--rpc), or raw JSON (--json)")
+    .description(
+      "Print a run-log: step/status summary (default), all RPCs (--rpc), raw JSON (--json), or an HTML report (--html)",
+    )
     .option("--json", "Print the full run-log JSON")
     .option("--rpc", "Print every RPC call")
-    .action(async (runId: string, opts: { json?: boolean; rpc?: boolean }) => {
+    .option(
+      "--html [path]",
+      `Write a self-contained HTML report (default: ${RUNS_DIR}/<run-id>.html)`,
+    )
+    .action(async (runId: string, opts: { json?: boolean; rpc?: boolean; html?: string | true }) => {
       const log = await RunLogStore.load(runId).catch((error) => {
         if ((error as NodeJS.ErrnoException).code === "ENOENT") {
           throw new CliError(`Run-log "${runId}" not found (in .fiber-lab/runs/).`, EXIT_CODES.validation);
         }
         throw error;
       });
+
+      if (opts.html !== undefined) {
+        const path = await writeHtml(log, opts.html);
+        if (opts.json) console.log(JSON.stringify({ runId: log.runId, report: path }));
+        else console.log(`Wrote ${path}`);
+        return;
+      }
 
       if (opts.json) console.log(JSON.stringify(log, null, 2));
       else if (opts.rpc) printRpc(log);

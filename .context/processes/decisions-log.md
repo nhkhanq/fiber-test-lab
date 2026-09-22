@@ -1,7 +1,7 @@
 ---
 type: decisions_log
 version: 1.0
-last_updated: 2026-07-04
+last_updated: 2026-09-22
 tags: [decisions, architecture, scope]
 ---
 
@@ -20,6 +20,7 @@ tags: [decisions, architecture, scope]
 [2026-07-04] **Chose Category 2**: Submit Test Lab under Category 2 (Node/Routing/Diagnostics); doing so alongside Test Lab creates 2 products for 2 different audiences (merchant vs. developer/operator), giving a more varied portfolio.
 
 [2026-07-04] **CLI-first**: The product surface is the CLI + YAML files + test-kit, with NO web dashboard — Reason: the audience is developers (comfortable with a terminal/config); it saves hackathon time.
+  > **Superseded in part (2026-09-22, post-hackathon):** a **read-only** GUI is now in scope — see "Post-hackathon" below. The CLI remains the only *control* surface; the GUI never drives a cluster.
 
 [2026-07-04] **No database, use JSON files**: The run-log is stored as a JSON file, not Postgres — Reason: Test Lab's data lives for minutes to hours and every reset wipes it clean; adding a DB would be over-engineering and works against the goal of "local, lightweight, one command". If complex querying is needed later -> consider SQLite (still no DB server needed).
 
@@ -63,6 +64,20 @@ Test Lab's underlying technical footprint is simpler (devops/scripting, no need 
 [2026-07-04] **`fnn-cli` uses a subcommand structure**: In reality it is `fnn-cli info`, `fnn-cli peer list_peers`, `fnn-cli channel list_channels` — NOT flat commands like `fnn-cli open_channel` as previously assumed. An FNN release includes 2 binaries: `fnn` (HTTP RPC + node) and `fnn-cli` (the management CLI).
 
 [2026-07-04] **Official RPC source**: fiber.world/docs/api-reference (the RPC reference) + the quick-starts: run-a-node, basic-transfer, transfer-stablecoin, multi-hop-transfer (exactly the two-hop-route scenario). FNN source: github.com/nervosnetwork/fiber. — Used as the source for E0-4 (the RPC notebook) instead of guessing.
+
+---
+
+## Post-hackathon (2026-09)
+
+> The hackathon is over; these decisions reopen scope that was deliberately cut for schedule reasons.
+
+[2026-09-22] **A read-only GUI is now in scope (reverses the hackathon-time "no web dashboard" cut)**: Ship a run viewer in two modes — `fiber-lab logs <run-id> --html` writing one self-contained HTML file, and `fiber-lab ui` serving `.fiber-lab/runs/` on 127.0.0.1 with auto-refresh so a live `up` can be watched. — Reason: the "no dashboard" decision was justified by hackathon time budget, which no longer applies. A topology graph, a step timeline and a filterable RPC table express things the CLI cannot: `logs --rpc` already prints hundreds of lines of raw JSON that is painful to read by eye.
+
+[2026-09-22] **The GUI is read-only and reads the run-log, never a node**: The viewer's only data source is `.fiber-lab/runs/*.json`. It does not call FNN RPC, and it does not import the orchestrator. — Reason: two invariants force this. (1) "All access to node clusters goes through the CLI so state is logged and resettable" — an RPC issued by a GUI would never reach the run-log. (2) Containers bind no host ports by default and the temporary port maps close on reset, so after a reset the run-log is the only surviving record; a viewer that queried nodes would show nothing for exactly the runs most worth inspecting. If a control-plane GUI (buttons for up/seed/reset) is ever added, it must `spawn` the CLI rather than import `lib/`, so every action still produces a run-log.
+
+[2026-09-22] **`--html` output is always a single self-contained file — never a folder**: Data is inlined into the HTML; no sibling asset files. — Reason: checked how comparable tools ship this. Playwright's HTML report is a folder that "can be served as a web page", so `npx playwright show-report` must start a server to view it; Vitest's html reporter writes multi-file output to `.vitest/` that needs `vite preview` unless `singleFile: true` is set. Both make the exported report unopenable over `file://`, which defeats the point of an artifact you can archive in CI, attach to an issue, or send to someone. webpack-bundle-analyzer's `static` mode (one HTML file) is the model to copy.
+
+[2026-09-22] **GUI stack: vanilla HTML + inline SVG, no bundler, no framework**: The viewer is plain TypeScript rendered through `tsx`, with hand-written SVG for the topology graph; no React/Vue, no Vite. — Reason: Vitest, Playwright and webpack-bundle-analyzer all use a framework but ship a **pre-built** bundle so the consumer never builds. This repo has no `dist` at all — `bin` points at `cli/index.ts` and `files:` ships source — so matching that property would mean either committing a bundle to git or adding a prepublish build that leaves a fresh `git clone` + `npm i` with a broken GUI. Vanilla gives the same property for free. **Escape hatch:** if the UI outgrows vanilla, bundle with `esbuild` (already present transitively via vitest) as a single publish-time command, rather than adopting a full Vite pipeline.
 
 ---
 

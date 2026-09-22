@@ -1,7 +1,7 @@
 ---
 type: cli_specification
 version: 1.0
-last_updated: 2026-07-04
+last_updated: 2026-09-22
 tags: [cli, commander, commands]
 ---
 
@@ -39,11 +39,20 @@ Teardown and cleanup.
 - **Output:** the list of runs that were cleaned up.
 - **Guarantee:** no leftover containers/networks — even if a prior `up` failed partway through.
 
-### `fiber-lab logs <run-id> [--json] [--rpc]`
+### `fiber-lab logs <run-id> [--json] [--rpc] [--html [path]]`
 Print the run-log.
 - Default: a summary of steps + status.
 - `--rpc` — print every raw RPC call (method/params/response/error) in full — for deep debugging.
 - `--json` — print the raw run-log JSON file.
+- `--html [path]` — write a **single self-contained** HTML report (topology graph, step timeline, filterable RPC table) instead of printing. Never a folder: all data and styles are inlined so the file opens over `file://` and can be archived as a CI artifact. Defaults to `.fiber-lab/runs/<run-id>.html`. Read-only; generating it touches no container and issues no RPC.
+
+### `fiber-lab ui [--port <n>] [--open] [--json]`
+Serve the run viewer over HTTP on `127.0.0.1` (never `0.0.0.0`), reading `.fiber-lab/runs/`.
+- Lists every run, drills into one, and re-reads the run-log on an interval so a run still being built by `up` fills in live.
+- Read-only by design: the server never calls FNN RPC and never imports the orchestrator — the CLI stays the only way to drive a cluster (see decisions-log, 2026-09-22).
+- `--port` — defaults to an ephemeral free port, printed on start.
+- `--open` — open the browser automatically.
+- Exit code 2 if the port is taken.
 
 ### `fiber-lab list [--json]`
 - Lists the available scenarios (reading `topology/scenarios/`) with their `description`.
