@@ -173,14 +173,20 @@ function graphFrames(model: ReportModel, positions: Positions): { label: string;
 }
 
 function renderTopology(model: ReportModel, nodes: ReportNode[], positions: Positions): string {
+  const stillBuilding = model.summary.status === "running";
   if (nodes.length === 0) return `<p class="empty">This run recorded no nodes.</p>`;
 
   const width = GRAPH_PADDING * 2 + SPACING * Math.max(nodes.length - 1, 0);
   const frames = graphFrames(model, positions);
 
   if (model.edges.length === 0 && frames.length === 0) {
-    return `<p class="empty">No channel snapshot was recorded for this run — it predates the
-      <code>channels</code> field, or no channel was opened.</p>
+    // While a run is building there is simply nothing to draw yet — saying the run-log is too old
+    // would be wrong, and it is the first thing a live viewer sees.
+    const reason = stillBuilding
+      ? `<p class="empty">No channel open yet — this run is still building.</p>`
+      : `<p class="empty">No channel snapshot was recorded for this run — it predates the
+         <code>channels</code> field, or no channel was opened.</p>`;
+    return `${reason}
       <svg viewBox="0 0 ${width} ${GRAPH_HEIGHT}" class="graph" role="img"
            aria-label="Nodes, with no channels recorded">${renderNodes(nodes, positions)}</svg>`;
   }
@@ -270,8 +276,8 @@ function renderTiles(model: ReportModel): string {
     ${tile("status", s.status, statusClass)}
     ${verdict}
     ${tile(
-      s.status === "reset" ? "active" : "duration",
-      formatDuration(s.status === "reset" ? s.activeMs : s.durationMs),
+      s.status === "running" ? "elapsed" : s.status === "reset" ? "active" : "duration",
+      formatDuration(s.status === "completed" || s.status === "failed" ? s.durationMs : s.activeMs),
     )}
     ${tile("rpc calls", String(model.rpcCalls.length))}
     ${model.slowestRpcMs === null ? "" : tile("slowest call", formatDuration(model.slowestRpcMs))}
