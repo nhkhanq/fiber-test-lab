@@ -8,6 +8,7 @@ export interface RpcCallRecord {
   response?: unknown;
   error?: unknown;
   at: string; // ISO8601
+  durationMs?: number;
 }
 
 export type RpcLogger = (record: RpcCallRecord) => void;
@@ -52,12 +53,14 @@ export class FiberClient {
     fn: (sdk: FiberSDK) => Promise<T>,
   ): Promise<T> {
     const at = new Date().toISOString();
+    const started = performance.now();
+    const durationMs = () => Math.round(performance.now() - started);
     try {
       const response = await fn(this.#sdk(node));
-      this.#logger?.({ node, method, params, response, at });
+      this.#logger?.({ node, method, params, response, at, durationMs: durationMs() });
       return response;
     } catch (error) {
-      this.#logger?.({ node, method, params, error, at });
+      this.#logger?.({ node, method, params, error, at, durationMs: durationMs() });
       throw error;
     }
   }
@@ -65,6 +68,8 @@ export class FiberClient {
 
   async rawCall(node: string, method: string, params: unknown[] = []): Promise<unknown> {
     const at = new Date().toISOString();
+    const started = performance.now();
+    const durationMs = () => Math.round(performance.now() - started);
     const endpoint = this.#endpoints[node];
     if (!endpoint) throw new Error(`Unknown node "${node}" — no endpoint configured`);
     try {
@@ -75,13 +80,13 @@ export class FiberClient {
       });
       const json = (await res.json()) as { result?: unknown; error?: { message?: string } };
       if (json.error) {
-        this.#logger?.({ node, method, params, error: json.error, at });
+        this.#logger?.({ node, method, params, error: json.error, at, durationMs: durationMs() });
         throw new Error(`RPC ${method} failed: ${json.error.message ?? JSON.stringify(json.error)}`);
       }
-      this.#logger?.({ node, method, params, response: json.result, at });
+      this.#logger?.({ node, method, params, response: json.result, at, durationMs: durationMs() });
       return json.result;
     } catch (error) {
-      this.#logger?.({ node, method, params, error, at });
+      this.#logger?.({ node, method, params, error, at, durationMs: durationMs() });
       throw error;
     }
   }

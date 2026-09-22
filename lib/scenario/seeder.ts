@@ -4,7 +4,7 @@ import type { FiberClient } from "../fiber/client";
 import { DEV_FUNDED_KEYS, SHANNON_PER_CKB, UDT_ASSET } from "../constants";
 import { killNode, startNode } from "../docker/orchestrator";
 import { mintUdt, type UdtScript } from "../fiber/udt";
-import type { RunLogStore } from "../runlog/store";
+import type { ChannelSnapshot, RunLogStore } from "../runlog/store";
 import { containerName } from "../../topology/compose.template";
 import type { Asset, Scenario } from "./schema";
 
@@ -142,6 +142,55 @@ async function resolveNodes(
   return resolved;
 }
 
+function hexToDecimal(value: string | undefined): string | null {
+  if (value === undefined || value === null) return null;
+  try {
+    return BigInt(value).toString();
+  } catch {
+    return null;
+  }
+}
+
+interface RawChannel {
+  channel_id: string;
+  pubkey?: string;
+  peer_id?: string;
+  state: { state_name: string };
+  local_balance?: string;
+  remote_balance?: string;
+  funding_udt_type_script?: unknown;
+}
+
+/** Every node's view of its channels, stored on the step that changed them so the run viewer can
+ *  draw the topology without reverse-engineering it out of scattered list_channels responses.
+ *  Never throws: a snapshot is a debugging aid, not part of the scenario's outcome. */
+async function captureChannels(
+  client: FiberClient,
+  nodes: Record<string, ResolvedNode>,
+): Promise<ChannelSnapshot[]> {
+  const nameByPubkey = new Map(
+    Object.entries(nodes).map(([name, r]) => [r.pubkey.toLowerCase(), name]),
+  );
+  const snapshots: ChannelSnapshot[] = [];
+  for (const node of Object.keys(nodes)) {
+    const res = (await client
+      .rawCall(node, "list_channels", [{}])
+      .catch(() => null)) as { channels?: RawChannel[] } | null;
+    for (const ch of res?.channels ?? []) {
+      snapshots.push({
+        node,
+        peer: nameByPubkey.get((ch.pubkey ?? ch.peer_id ?? "").toLowerCase()) ?? null,
+        channelId: ch.channel_id,
+        state: ch.state.state_name,
+        asset: ch.funding_udt_type_script ? UDT_ASSET : "CKB",
+        localBalance: hexToDecimal(ch.local_balance),
+        remoteBalance: hexToDecimal(ch.remote_balance),
+      });
+    }
+  }
+  return snapshots;
+}
+
 export async function runSeed(
   scenario: Scenario,
   client: FiberClient,
@@ -159,11 +208,29 @@ export async function runSeed(
       udt = udtByNode[ch.from] ?? (await mintForNode(scenario, ch.from, ch.capacity, ckbEndpoint, store));
       udtByNode[ch.from] = udt;
     }
-    await client.connectPeer(ch.from, { address: nodes[ch.to]!.address });
-    await waitForPeer(client, ch.from, nodes[ch.to]!.pubkey, config);
-    await openChannel(client, ch.from, nodes[ch.to]!.pubkey, ch.capacity, ch.asset, udt, config);
-    await waitChannelReady(client, ch.from, nodes[ch.to]!.pubkey, config);
-    store.recordStep("open_channel", { from: ch.from, to: ch.to, capacity: ch.capacity, asset: ch.asset }, { ready: true });
+    // Opening a channel takes several seconds across four stages; report each one as it happens
+    // so `fiber-lab ui` shows where the run currently is.
+    const step = store.beginStep("open_channel", {
+      from: ch.from,
+      to: ch.to,
+      capacity: ch.capacity,
+      asset: ch.asset,
+    });
+    try {
+      step.update({ stage: "connecting to peer" });
+      await client.connectPeer(ch.from, { address: nodes[ch.to]!.address });
+      await waitForPeer(client, ch.from, nodes[ch.to]!.pubkey, config);
+
+      step.update({ stage: "opening channel" });
+      await openChannel(client, ch.from, nodes[ch.to]!.pubkey, ch.capacity, ch.asset, udt, config);
+
+      step.update({ stage: "waiting for ChannelReady" });
+      await waitChannelReady(client, ch.from, nodes[ch.to]!.pubkey, config);
+    } catch (error) {
+      step.end({ error: error instanceof Error ? error.message : String(error) });
+      throw error;
+    }
+    step.end({ ready: true }, await captureChannels(client, nodes));
   }
 
   await runSeedSteps(scenario, client, store, config, runId, nodes, udtByNode);
@@ -202,6 +269,7 @@ export async function runSeedSteps(
       case "send_payment": {
         const asset: Asset = step.asset ?? "CKB";
         const input = { from: step.from, to: step.to, amount: step.amount, asset };
+        const record = store.beginStep("send_payment", input);
         try {
           let paymentParams: Record<string, unknown>;
           if (step.useInvoice) {
@@ -215,13 +283,14 @@ export async function runSeedSteps(
           }
           // send_payment can fail synchronously (insufficient outbound / expired invoice) — record it, don't throw.
           const res = (await client.rawCall(step.from!, "send_payment", [paymentParams])) as { payment_hash: string };
+          record.update({ payment_hash: res.payment_hash, status: "Inflight" });
           const final = await waitPayment(client, step.from!, res.payment_hash, config);
-          store.recordStep("send_payment", input, final);
+          record.end(final, await captureChannels(client, nodes));
         } catch (e) {
           const message = e instanceof Error ? e.message : String(e);
           const firstHop = scenario.channels.find((c) => c.from === step.from)?.to ?? step.to!;
           const peerConnected = await isPeerConnected(client, step.from!, pubkey[firstHop]!).catch(() => true);
-          store.recordStep("send_payment", input, { error: message, peerConnected });
+          record.end({ error: message, peerConnected }, await captureChannels(client, nodes));
         }
         break;
       }

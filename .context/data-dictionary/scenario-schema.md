@@ -1,7 +1,7 @@
 ---
 type: data_dictionary
 version: 1.0
-last_updated: 2026-07-04
+last_updated: 2026-09-22
 tags: [yaml, zod, scenario, run-log, schema]
 ---
 
@@ -92,6 +92,27 @@ Records an entire `fiber-lab up` run so it can be debugged after the containers 
 | response | object \| null | The raw result |
 | error | object \| null | The raw error from the node (kept as-is for debugging) |
 | at | ISO8601 | When the call was made |
+| durationMs | number? | Optional (added 2026-09-22). Wall-clock time of the call, for the run viewer's latency view. Absent in run-logs written before that date. |
+
+### The `StepRecord` type
+| Field | Type | Description |
+|---|---|---|
+| action | string | The seed action that ran (open_channel, send_payment, wait, …) |
+| input | object \| null | The step's input as declared in the scenario |
+| result | object \| null | The outcome |
+| at | ISO8601 | When the step ran |
+| channels | ChannelSnapshot[]? | Optional (added 2026-09-22). Every node's view of its channels right after this step, so the run viewer can draw the topology directly instead of reverse-engineering it from `list_channels` responses scattered through `rpcCalls`. Only recorded for steps that change balances (open_channel, send_payment). |
+
+### The `ChannelSnapshot` type
+| Field | Type | Description |
+|---|---|---|
+| node | string | The node whose view this is |
+| peer | string \| null | The counterparty's node name, or null if its pubkey maps to no node in the scenario |
+| channelId | string | FNN's `channel_id` — the same on both sides, so the two views pair up |
+| state | string | FNN's `state.state_name` (e.g. ChannelReady) |
+| asset | string | "CKB", or the UDT asset when the channel is UDT-funded |
+| localBalance | string \| null | Decimal string in base units (shannon for CKB) — FNN returns hex, and UDT amounts can exceed `Number.MAX_SAFE_INTEGER` |
+| remoteBalance | string \| null | Same, from this node's point of view |
 
 > The run-log is the "source of truth" for understanding why a test failed — once `reset` has run, the containers are gone and can no longer be asked.
 

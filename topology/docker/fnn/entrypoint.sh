@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 set -euo pipefail
 
 RPC_PORT="${FNN_RPC_PORT:-8227}"

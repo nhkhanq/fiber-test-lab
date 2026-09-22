@@ -52,6 +52,7 @@ is meant to cover. The architecture and design rationale follow below the table 
 - Pinned versions
 - Quick start with the CLI
 - CLI command reference
+- Run viewer
 - Scenario file reference
 - Built-in scenarios
 - Writing a custom scenario
@@ -259,7 +260,7 @@ so it remains available for later inspection.
 ### logs
 
 ```bash
-fiber-lab logs <run-id> [--rpc] [--json]
+fiber-lab logs <run-id> [--rpc] [--json] [--html [path]]
 ```
 
 Prints the run-log for a given run-id.
@@ -269,8 +270,51 @@ Prints the run-log for a given run-id.
 - `--rpc` prints every raw RPC call made during the run: node, method, parameters, and
   response or error.
 - `--json` prints the entire run-log file as JSON.
+- `--html [path]` writes an HTML report instead of printing (default:
+  `.fiber-lab/runs/<run-id>.html`). See [Run viewer](#run-viewer) below.
 
 This works after the run has been reset, because the run-log file is not deleted by `reset`.
+
+### ui
+
+```bash
+fiber-lab ui [--port <n>] [--open] [--json]
+```
+
+Serves the run viewer on `127.0.0.1` — never on `0.0.0.0`, because a run-log carries node
+pubkeys, container names and every raw RPC of the run. With no `--port` it takes a free
+ephemeral port and prints the URL. Exits `2` if the port you asked for is taken.
+
+The page lists every run in `.fiber-lab/runs/` and links to each report. A report opened this
+way polls its own run-log every two seconds and reloads when it grows, so you can start
+`fiber-lab up` in one terminal and watch the topology and RPC calls fill in.
+
+## Run viewer
+
+The same report renders two ways: `logs --html` writes it to a file, `ui` serves it live. Both
+show
+
+- a **topology graph** — one SVG edge per channel, where the thick segment is the left node's
+  local balance and the dot marks the split, so you can see which way the liquidity sits; the
+  edge along the payment path is highlighted;
+- a **step timeline** — every seed step as a bar, which is usually how you find out that a run
+  spent most of its time waiting for a channel to reach `ChannelReady`;
+- an **RPC table** — every call with its duration, filterable by node, by method, by text, or
+  down to errors only, and expandable to the raw params and response.
+
+Two properties it holds on purpose:
+
+- **It is read-only and never talks to a node.** Its only source is the run-log JSON. That is
+  not a limitation but the point: containers bind no host ports by default, the temporary port
+  maps close on `reset`, and after a reset the run-log is the only surviving record of the run.
+  The CLI stays the single control surface, so everything a cluster is ever asked to do lands in
+  a run-log.
+- **`--html` is always one self-contained file**, never a folder — all data and styles inlined.
+  It opens over `file://`, so you can archive it as a CI artifact or attach it to an issue
+  without needing a server to read it back.
+
+A run-log written before the viewer existed still renders; it just has no topology graph and no
+RPC durations, since `channels` and `durationMs` were added on 2026-09-22.
 
 ### list
 

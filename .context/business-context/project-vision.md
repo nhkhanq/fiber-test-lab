@@ -56,7 +56,7 @@ Right now, the ONLY way to "touch" these situations is to create them for real o
 
 **OUT OF SCOPE (documented as future work):**
 - Running against a real testnet/mainnet (Test Lab is deliberately a local devnet)
-- A web UI/dashboard (deliberately CLI-first — see system-design)
+- A GUI that **controls** a cluster (up/seed/reset from a browser) — the CLI stays the only control surface. Note: a **read-only** run viewer (`logs --html`, `fiber-lab ui`) moved INTO scope on 2026-09-22, post-hackathon; see decisions-log.
 - A database server (uses JSON files)
 - Precisely simulating real network failures (peer-offline via `docker kill` is best-effort)
 - Internal routing algorithm/CCH work (not touched, only uses the RPCs that already exist)
