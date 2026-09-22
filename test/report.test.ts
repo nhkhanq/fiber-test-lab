@@ -236,6 +236,50 @@ describe("renderReport", () => {
   });
 });
 
+describe("topology rendering", () => {
+  it("gives every node its own colour and paints each balance in its holder's colour", () => {
+    const html = renderReport(buildReportModel(runLog()));
+    // One CSS variable per node, and the edge segments reference them rather than raw hex.
+    expect(html).toContain("--node-alice:");
+    expect(html).toContain("--node-bob:");
+    expect(html).toContain('stroke="var(--node-alice, var(--muted))"');
+    expect(html).toContain('stroke="var(--node-bob, var(--muted))"');
+  });
+
+  it("defines dark-mode colours under both the media query and the theme scope", () => {
+    const html = renderReport(buildReportModel(runLog()));
+    expect(html).toContain('@media (prefers-color-scheme: dark)');
+    expect(html).toContain(':root[data-theme="dark"]');
+    // The dark steps are chosen for the dark surface, not an automatic flip of the light ones.
+    expect(html).toContain("#3987e5");
+    expect(html).toContain("#2a78d6");
+  });
+
+  it("builds one scrubber frame per snapshot and hides the scrubber when there is nothing to scrub", () => {
+    const single = renderReport(buildReportModel(runLog()));
+    expect(single).not.toContain('id="frame-range"');
+
+    const log = runLog();
+    const second = structuredClone(log.steps[0]!);
+    second.at = "2026-09-22T10:00:22.000Z";
+    second.channels![0]!.localBalance = "39000000000";
+    log.steps.push(second);
+
+    const model = buildReportModel(log);
+    expect(model.steps.filter((s) => s.edges.length > 0)).toHaveLength(2);
+    const html = renderReport(model);
+    expect(html).toContain('id="frame-range"');
+    expect(html).toContain('max="1"');
+  });
+
+  it("animates the flow only along the payment path", () => {
+    const html = renderReport(buildReportModel(runLog()));
+    const edges = html.slice(html.indexOf('id="graph-edges"'), html.indexOf("</svg>"));
+    // One edge, and it is on the path, so exactly one packet.
+    expect(edges.match(/animateMotion/g)).toHaveLength(1);
+  });
+});
+
 describe("ui server", () => {
   it("binds loopback only and serves the run list, a report and its JSON", async () => {
     const server = await startUiServer();

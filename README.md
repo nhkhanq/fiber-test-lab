@@ -294,13 +294,21 @@ way polls its own run-log every two seconds and reloads when it grows, so you ca
 The same report renders two ways: `logs --html` writes it to a file, `ui` serves it live. Both
 show
 
-- a **topology graph** — one SVG edge per channel, where the thick segment is the left node's
-  local balance and the dot marks the split, so you can see which way the liquidity sits; the
-  edge along the payment path is highlighted;
+- a **topology graph** — one SVG edge per channel, split where the liquidity actually sits. Each
+  segment wears the colour of the node holding it (colour follows the node, not the side of the
+  edge, so a node keeps its colour across every channel), both amounts are labelled, and a packet
+  animates along the reconstructed payment path. A scrubber below the graph walks the run
+  snapshot by snapshot — arrow keys work too — so you can watch the balances move;
 - a **step timeline** — every seed step as a bar, which is usually how you find out that a run
   spent most of its time waiting for a channel to reach `ChannelReady`;
-- an **RPC table** — every call with its duration, filterable by node, by method, by text, or
-  down to errors only, and expandable to the raw params and response.
+- an **RPC table** — every call with a latency bar and duration, filterable by node, by method, by
+  text, or down to errors only, and expandable to the raw params and response;
+- **stat tiles** for status, expectation, duration, call count and slowest call.
+
+The palette is the dataviz reference palette, checked with its validator across all node pairs in
+both light and dark mode (worst CVD ΔE 9.2 / 9.4). Status never rides on colour alone — every step
+carries a glyph and its text — and the channel balances are repeated as a table under the graph,
+which is what the contrast rule requires for the lighter hues.
 
 Two properties it holds on purpose:
 
