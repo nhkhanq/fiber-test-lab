@@ -285,11 +285,17 @@ Serves the run viewer on `127.0.0.1` — never on `0.0.0.0`, because a run-log c
 pubkeys, container names and every raw RPC of the run. With no `--port` it takes a free
 ephemeral port and prints the URL. Exits `2` if the port you asked for is taken.
 
-The page lists every run in `.fiber-lab/runs/` and links to each report. A report opened this
-way polls its own run-log every two seconds and reloads when it grows, so you can start
-`fiber-lab up` in one terminal and watch the topology and RPC calls fill in.
+The page lists every run in `.fiber-lab/runs/` and links to each report. A report opened this way
+polls its own run-log once a second and reloads when anything visible changes, so you can start
+`fiber-lab up` in one terminal and watch the run build: `docker_up` carries compose's own progress
+lines, `wait_ready` counts containers as they go healthy, `open_channel` names the stage it is in.
+
+Because the page only reloads when the run-log changes, a finished run's tab will not pick up
+changes to the viewer's own code — hard-refresh while working on it.
 
 ## Run viewer
+
+![The run viewer: stat tiles, a channel topology graph with a scrubber, a step timeline and an RPC table](docs/images/run-viewer.png)
 
 The same report renders two ways: `logs --html` writes it to a file, `ui` serves it live. Both
 show
@@ -321,8 +327,22 @@ Two properties it holds on purpose:
   It opens over `file://`, so you can archive it as a CI artifact or attach it to an issue
   without needing a server to read it back.
 
+Dark mode is not an automatic flip of the light theme — its colours are chosen for the dark
+surface and validated against it:
+
+![The same report in dark mode](docs/images/run-viewer-dark.png)
+
 A run-log written before the viewer existed still renders; it just has no topology graph and no
-RPC durations, since `channels` and `durationMs` were added on 2026-09-22.
+RPC durations, since `channels` and `durationMs` were added in v1.1.0.
+
+To render a run-log from your own code rather than through the CLI:
+
+```typescript
+import { buildReportModel, renderReport, RunLogStore } from "fiber-test-lab/report"
+
+const log = await RunLogStore.load(runId)
+await writeFile("report.html", renderReport(buildReportModel(log)))
+```
 
 ### list
 
