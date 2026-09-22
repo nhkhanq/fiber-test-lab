@@ -46,6 +46,9 @@ export interface ReportStep {
   offsetMs: number;
   durationMs: number | null;
   ok: boolean;
+  running: boolean;
+  /** What the step is doing right now, while it runs (a compose progress line, a stage name). */
+  progress: string | null;
   input: unknown;
   result: unknown;
   summary: string;
@@ -67,6 +70,9 @@ export interface ReportRpc {
 }
 
 export interface ReportModel {
+  /** Changes whenever anything a reader can see changes — the live page reloads on a new value.
+   *  Step counts alone are not enough: a running step's progress changes without adding a step. */
+  fingerprint: string;
   summary: ReportSummary;
   nodes: ReportNode[];
   edges: ReportEdge[];
@@ -96,6 +102,19 @@ export function formatAmount(raw: string | null, asset: string): string {
   return `${whole}.${decimals} CKB`;
 }
 
+function stepProgress(step: StepRecord): string | null {
+  const result = step.result as Record<string, unknown> | null;
+  if (result === null || typeof result !== "object") return null;
+  if (typeof result.stage === "string") return result.stage;
+  if (typeof result.latest === "string") return result.latest;
+  if (Array.isArray(result.pending) && Array.isArray(result.ready)) {
+    const total = result.pending.length + result.ready.length;
+    return `${result.ready.length}/${total} healthy`;
+  }
+  if (typeof result.status === "string" && result.status === "Inflight") return "payment inflight";
+  return null;
+}
+
 function stepOk(step: StepRecord): boolean {
   const result = step.result as Record<string, unknown> | null;
   if (result === null || typeof result !== "object") return true;
@@ -109,6 +128,16 @@ function describeStep(step: StepRecord): string {
   const input = (step.input ?? {}) as Record<string, unknown>;
   const result = (step.result ?? {}) as Record<string, unknown>;
   switch (step.action) {
+    case "docker_up": {
+      const services = Array.isArray(input.services) ? input.services.length : 0;
+      if (step.status === "running") return stepProgress(step) ?? `starting ${services} services`;
+      return `${result.imagesBuilt ?? 0} images built, ${result.containersStarted ?? 0} containers started`;
+    }
+    case "wait_ready": {
+      const containers = Array.isArray(input.containers) ? input.containers.length : 0;
+      if (step.status === "running") return stepProgress(step) ?? "waiting for health checks";
+      return typeof result.error === "string" ? "timed out" : `${containers} containers healthy`;
+    }
     case "open_channel":
       return `${input.from} → ${input.to}, ${input.capacity} ${input.asset ?? "CKB"}`;
     case "send_payment": {
@@ -236,8 +265,13 @@ function buildSteps(log: RunLog): ReportStep[] {
     // human ran `fiber-lab reset`, often hours later. Charging that to the step would make the
     // timeline unreadable, so the last step of a reset run simply has no measured duration.
     const isLast = index === log.steps.length - 1;
+    const running = step.status === "running";
+    // A bracketed step knows exactly when it ended; the rest are still inferred from what follows.
     const next =
-      log.steps[index + 1]?.at ?? (isLast && log.status === "reset" ? null : log.finishedAt);
+      step.endedAt ??
+      (running
+        ? new Date().toISOString()
+        : log.steps[index + 1]?.at ?? (isLast && log.status === "reset" ? null : log.finishedAt));
     return {
       index,
       action: step.action,
@@ -245,6 +279,8 @@ function buildSteps(log: RunLog): ReportStep[] {
       offsetMs: ms(log.startedAt, step.at),
       durationMs: next === null || next === undefined ? null : ms(step.at, next),
       ok: stepOk(step),
+      running,
+      progress: running ? stepProgress(step) : null,
       input: step.input,
       result: step.result,
       summary: describeStep(step),
@@ -287,7 +323,14 @@ export function buildReportModel(log: RunLog): ReportModel {
     .map((c) => c.durationMs)
     .filter((d): d is number => d !== null);
 
+  const lastStep = steps.at(-1);
   return {
+    fingerprint: [
+      log.status,
+      steps.length,
+      rpcCalls.length,
+      lastStep?.running === true ? `running:${lastStep.summary}` : "idle",
+    ].join("|"),
     summary: buildSummary(log),
     nodes: log.nodes.map((node) => ({
       name: node.name,

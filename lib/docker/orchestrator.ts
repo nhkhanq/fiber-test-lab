@@ -30,13 +30,42 @@ export interface DockerResult {
   stderr: string;
 }
 
-function docker(args: string[]): Promise<DockerResult> {
+/** Called with each complete line docker prints, as it prints it. `docker compose` reports its
+ *  progress on stderr, and it only makes sense live: buffering it to the end is how a 40-second
+ *  image build looks like nothing happening at all. */
+export type LineHandler = (line: string) => void;
+
+function docker(args: string[], onLine?: LineHandler): Promise<DockerResult> {
   return new Promise((resolve, reject) => {
     const child = spawn("docker", args, { cwd: process.cwd() });
     let stdout = "";
     let stderr = "";
-    child.stdout.on("data", (d) => (stdout += d.toString()));
-    child.stderr.on("data", (d) => (stderr += d.toString()));
+
+    const streamLines = (): ((chunk: string) => void) => {
+      let partial = "";
+      return (chunk: string) => {
+        partial += chunk;
+        const lines = partial.split("\n");
+        partial = lines.pop() ?? "";
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.length > 0) onLine?.(trimmed);
+        }
+      };
+    };
+    const onOut = streamLines();
+    const onErr = streamLines();
+
+    child.stdout.on("data", (d) => {
+      const text = d.toString();
+      stdout += text;
+      if (onLine) onOut(text);
+    });
+    child.stderr.on("data", (d) => {
+      const text = d.toString();
+      stderr += text;
+      if (onLine) onErr(text);
+    });
     child.on("error", reject);
     child.on("close", (code) => resolve({ code: code ?? -1, stdout, stderr }));
   });
@@ -89,6 +118,7 @@ export async function composeUp(params: {
   composeFile: string;
   composeYaml: string;
   build?: boolean;
+  onLine?: LineHandler;
 }): Promise<DockerResult> {
   await mkdir(dirname(params.composeFile), { recursive: true });
   await writeFile(params.composeFile, params.composeYaml, "utf8");
@@ -104,7 +134,7 @@ export async function composeUp(params: {
     "-d",
   ];
   if (params.build) args.push("--build");
-  return docker(args);
+  return docker(args, params.onLine);
 }
 
 async function containerHealth(container: string): Promise<string> {
@@ -117,13 +147,31 @@ async function containerHealth(container: string): Promise<string> {
   return r.stdout.trim();
 }
 
-export async function waitForReady(containers: string[], config: GlobalConfig): Promise<void> {
+export interface ReadyProgress {
+  ready: string[];
+  pending: string[];
+}
+
+export async function waitForReady(
+  containers: string[],
+  config: GlobalConfig,
+  onProgress?: (progress: ReadyProgress) => void,
+): Promise<void> {
   const deadline = Date.now() + config.pollTimeoutMs;
   const pending = new Set(containers);
+  const report = () =>
+    onProgress?.({
+      ready: containers.filter((c) => !pending.has(c)),
+      pending: [...pending],
+    });
 
+  report();
   while (pending.size > 0) {
     for (const c of [...pending]) {
-      if ((await containerHealth(c)) === "healthy") pending.delete(c);
+      if ((await containerHealth(c)) === "healthy") {
+        pending.delete(c);
+        report();
+      }
     }
     if (pending.size === 0) return;
     if (Date.now() > deadline) {
@@ -158,6 +206,23 @@ async function hostEndpoint(container: string, port: number): Promise<string | n
   return hostPort ? `http://127.0.0.1:${hostPort}` : null;
 }
 
+/** ` Container flab_<run>_ckb  Started` / ` Image flab_<run>-alice  Built` — compose's progress
+ *  lines. Anything that does not match this shape is not progress and is left alone. */
+const COMPOSE_PROGRESS =
+  /^(Container|Image|Network|Volume)\s+(\S+)\s+(Building|Built|Creating|Created|Starting|Started|Waiting|Healthy|Running|Pulling|Pulled|Recreate|Recreated|Error.*)$/;
+
+export interface ComposeProgress {
+  latest: string;
+  containersStarted: number;
+  imagesBuilt: number;
+}
+
+export function parseComposeProgress(line: string): { resource: string; name: string; state: string } | null {
+  const match = COMPOSE_PROGRESS.exec(line);
+  if (match === null) return null;
+  return { resource: match[1]!, name: match[2]!, state: match[3]! };
+}
+
 export interface UpResult {
   runId: string;
   project: string;
@@ -188,14 +253,34 @@ export async function up(
 
   await generateNodeConfigs(scenario, runId);
 
+  // Each phase is recorded as it starts and updated as it runs, so `fiber-lab ui` shows an image
+  // build in progress rather than a blank page for its whole 40 seconds.
+  const composeStep = store.beginStep("docker_up", { services: Object.keys(project.services) });
+  const built = new Set<string>();
+  const started = new Set<string>();
+
   const result = await composeUp({
     project: project.name,
     composeFile,
     composeYaml: renderComposeYaml(project),
     build: true,
+    onLine: (line) => {
+      const progress = parseComposeProgress(line);
+      if (progress === null) return;
+      if (progress.resource === "Image" && progress.state === "Built") built.add(progress.name);
+      if (progress.resource === "Container" && (progress.state === "Started" || progress.state === "Running")) {
+        started.add(progress.name);
+      }
+      composeStep.update({
+        latest: line,
+        imagesBuilt: built.size,
+        containersStarted: started.size,
+      } satisfies ComposeProgress);
+    },
   });
 
   if (result.code !== 0) {
+    composeStep.end({ failed: true, stderr: result.stderr.trim().split("\n").slice(-5) });
     store.finish("failed", result.stderr.trim() || `docker compose up exit ${result.code}`);
     await store.save();
     if (shouldKeepOnFailure(config, opts.keep)) printKeepGuidance(runId);
@@ -203,13 +288,21 @@ export async function up(
     throw new DockerError(`docker compose up failed (run ${runId})`, result.stderr);
   }
 
+  composeStep.end({ imagesBuilt: built.size, containersStarted: started.size });
+
+  const readyStep = store.beginStep("wait_ready", {
+    containers: Object.keys(project.services).map((n) => containerName(config, runId, n)),
+  });
   try {
     await waitForReady(
       Object.keys(project.services).map((n) => containerName(config, runId, n)),
       config,
+      (progress) => readyStep.update(progress),
     );
+    readyStep.end();
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    readyStep.end({ error: msg });
     store.finish("failed", msg);
     await store.save();
     if (shouldKeepOnFailure(config, opts.keep)) printKeepGuidance(runId);

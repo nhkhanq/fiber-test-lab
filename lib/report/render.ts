@@ -121,18 +121,25 @@ function renderTimeline(model: ReportModel): string {
     .map((step) => {
       const left = (step.offsetMs / span) * 100;
       const width = Math.max(((step.durationMs ?? 0) / span) * 100, 0.6);
+      const klass = step.running ? "step running" : step.ok ? "step" : "step failed";
       return `
-      <li class="${step.ok ? "step" : "step failed"}">
+      <li class="${klass}">
         <div class="step-head">
           <span class="step-action">${escapeHtml(step.action)}</span>
           <span class="step-summary">${escapeHtml(step.summary)}</span>
-          <span class="step-time">+${formatDuration(step.offsetMs)} · ${formatDuration(
-            step.durationMs,
-          )}</span>
+          <span class="step-time">+${formatDuration(step.offsetMs)} ·
+            <span class="step-elapsed" data-started="${escapeHtml(step.at)}">${formatDuration(
+              step.durationMs,
+            )}</span>${step.running ? " so far" : ""}</span>
         </div>
         <div class="track"><div class="bar" style="left:${left.toFixed(2)}%;width:${width.toFixed(
           2,
         )}%"></div></div>
+        ${
+          step.progress === null
+            ? ""
+            : `<p class="step-progress">${escapeHtml(step.progress)}</p>`
+        }
       </li>`;
     })
     .join("");
@@ -233,6 +240,14 @@ const STYLES = `
   .track { position: relative; height: 6px; background: var(--panel); border-radius: 3px; margin-top: 6px; }
   .bar { position: absolute; top: 0; height: 6px; border-radius: 3px; background: var(--bar); min-width: 2px; }
   .step.failed .bar { background: var(--fail); }
+  .step.running .step-action::after {
+    content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 6px;
+    border-radius: 50%; background: var(--accent); animation: pulse 1s ease-in-out infinite;
+  }
+  .step.running .bar { background: var(--accent); animation: pulse 1.4s ease-in-out infinite; }
+  .step-progress { margin: 6px 0 0; font-size: 12px; color: var(--muted); font-family: ui-monospace, monospace; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+  @media (prefers-reduced-motion: reduce) { .step.running .step-action::after, .step.running .bar { animation: none; } }
   .filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
   .filters input[type=search], .filters select {
     background: var(--bg); color: var(--text); border: 1px solid var(--border);
@@ -305,6 +320,19 @@ const SCRIPT = `
   }
 
   apply();
+
+  // The elapsed time of a running step would otherwise sit frozen between reloads.
+  const elapsedCell = document.querySelector(".step.running .step-elapsed");
+  if (elapsedCell) {
+    const startedAt = Date.parse(elapsedCell.dataset.started);
+    setInterval(() => {
+      const elapsed = Date.now() - startedAt;
+      elapsedCell.textContent =
+        elapsed < 60000
+          ? (elapsed / 1000).toFixed(1) + "s"
+          : Math.floor(elapsed / 60000) + "m " + Math.round((elapsed % 60000) / 1000) + "s";
+    }, 500);
+  }
 `;
 
 export interface RenderOptions {
@@ -318,18 +346,16 @@ export interface RenderOptions {
  *  and the exported file render through exactly the same code path. */
 const LIVE_SCRIPT = `
   (function () {
-    const fingerprint = (m) =>
-      m.summary.status + ":" + m.steps.length + ":" + m.rpcCalls.length;
-    let current = fingerprint(JSON.parse(document.getElementById("run-data").textContent));
-    setInterval(async () => {
+    let current = JSON.parse(document.getElementById("run-data").textContent).fingerprint;
+    const tick = async () => {
       try {
         const res = await fetch(location.pathname + ".json", { cache: "no-store" });
-        if (!res.ok) return;
-        if (fingerprint(await res.json()) !== current) location.reload();
+        if (res.ok && (await res.json()).fingerprint !== current) location.reload();
       } catch (e) {
         /* the server went away — keep showing the last render */
       }
-    }, 2000);
+    };
+    setInterval(tick, 1000);
   })();
 `;
 
@@ -358,7 +384,7 @@ export function renderRunList(
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta http-equiv="refresh" content="10" />
+<meta http-equiv="refresh" content="3" />
 <title>fiber-lab runs</title>
 <style>${STYLES}
   a { color: var(--accent); }

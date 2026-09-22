@@ -31,6 +31,11 @@ export const StepRecordSchema = z.object({
   result: z.unknown().nullable().default(null),
   at: z.string(),
   channels: z.array(ChannelSnapshotSchema).optional(),
+  /** Set by beginStep/endStep for work long enough to watch (image builds, waiting for READY,
+   *  opening a channel). Absent on a step recorded in one shot, and on every pre-2026-09-22
+   *  run-log, both of which are complete by definition. */
+  status: z.enum(["running", "done"]).optional(),
+  endedAt: z.string().optional(),
 });
 
 export const NodeRecordSchema = z.object({
@@ -72,11 +77,37 @@ function serializeError(error: unknown): unknown {
   return error;
 }
 
+/** A step that is still running. `update` publishes progress while it runs — the run viewer
+ *  polls the run-log, so anything not written to disk is invisible until the run ends. */
+export interface StepHandle {
+  update(result: unknown): void;
+  end(result?: unknown, channels?: ChannelSnapshot[]): void;
+}
+
+const FLUSH_INTERVAL_MS = 200;
+
 export class RunLogStore {
   #log: RunLog;
+  /** Writes are coalesced: docker streams progress far faster than the disk needs to see it,
+   *  and the viewer polls on its own clock anyway. */
+  #flushTimer: NodeJS.Timeout | null = null;
+  #writing: Promise<void> | null = null;
+  #dirty = false;
 
   private constructor(log: RunLog) {
     this.#log = log;
+  }
+
+  /** Schedule a write. Callers never await this: a run-log write must not pace the run. */
+  #touch(): void {
+    this.#dirty = true;
+    if (this.#flushTimer !== null) return;
+    this.#flushTimer = setTimeout(() => {
+      this.#flushTimer = null;
+      void this.save();
+    }, FLUSH_INTERVAL_MS);
+    // Never hold the process open for a pending run-log write.
+    this.#flushTimer.unref?.();
   }
 
   static create(params: {
@@ -119,6 +150,7 @@ export class RunLogStore {
       at: record.at,
       ...(record.durationMs === undefined ? {} : { durationMs: record.durationMs }),
     });
+    this.#touch();
   };
 
   recordStep(
@@ -134,22 +166,77 @@ export class RunLogStore {
       at: new Date().toISOString(),
       ...(channels === undefined ? {} : { channels }),
     });
+    this.#touch();
+  }
+
+  /** Record a step that has started but not finished, so the viewer can show it in flight. */
+  beginStep(action: string, input: unknown = null): StepHandle {
+    const step: StepRecord = {
+      action,
+      input,
+      result: null,
+      at: new Date().toISOString(),
+      status: "running",
+    };
+    this.#log.steps.push(step);
+    this.#touch();
+
+    return {
+      update: (result: unknown) => {
+        if (step.status !== "running") return;
+        step.result = result;
+        this.#touch();
+      },
+      end: (result?: unknown, channels?: ChannelSnapshot[]) => {
+        if (result !== undefined) step.result = result;
+        if (channels !== undefined) step.channels = channels;
+        step.status = "done";
+        step.endedAt = new Date().toISOString();
+        this.#touch();
+      },
+    };
   }
 
   addNode(node: NodeRecord): void {
     this.#log.nodes.push(node);
+    this.#touch();
   }
 
+  /** Any step still marked running when the run ends died with it. */
   finish(status: RunStatus, error?: string): void {
+    const endedAt = new Date().toISOString();
+    for (const step of this.#log.steps) {
+      if (step.status === "running") {
+        step.status = "done";
+        step.endedAt = endedAt;
+      }
+    }
     this.#log.status = status;
-    this.#log.finishedAt = new Date().toISOString();
+    this.#log.finishedAt = endedAt;
     if (error !== undefined) this.#log.error = error;
+    this.#touch();
   }
 
   async save(): Promise<string> {
     const path = runLogPath(this.#log.runId);
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, JSON.stringify(this.#log, null, 2), "utf8");
+    // One write at a time; a write that lands mid-flight just re-runs afterwards.
+    if (this.#writing !== null) {
+      this.#dirty = true;
+      await this.#writing;
+      if (!this.#dirty) return path;
+    }
+
+    this.#dirty = false;
+    this.#writing = (async () => {
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, JSON.stringify(this.#log, null, 2), "utf8");
+    })();
+    try {
+      await this.#writing;
+    } finally {
+      this.#writing = null;
+    }
+    if (this.#dirty) return this.save();
     return path;
   }
 

@@ -208,16 +208,29 @@ export async function runSeed(
       udt = udtByNode[ch.from] ?? (await mintForNode(scenario, ch.from, ch.capacity, ckbEndpoint, store));
       udtByNode[ch.from] = udt;
     }
-    await client.connectPeer(ch.from, { address: nodes[ch.to]!.address });
-    await waitForPeer(client, ch.from, nodes[ch.to]!.pubkey, config);
-    await openChannel(client, ch.from, nodes[ch.to]!.pubkey, ch.capacity, ch.asset, udt, config);
-    await waitChannelReady(client, ch.from, nodes[ch.to]!.pubkey, config);
-    store.recordStep(
-      "open_channel",
-      { from: ch.from, to: ch.to, capacity: ch.capacity, asset: ch.asset },
-      { ready: true },
-      await captureChannels(client, nodes),
-    );
+    // Opening a channel takes several seconds across four stages; report each one as it happens
+    // so `fiber-lab ui` shows where the run currently is.
+    const step = store.beginStep("open_channel", {
+      from: ch.from,
+      to: ch.to,
+      capacity: ch.capacity,
+      asset: ch.asset,
+    });
+    try {
+      step.update({ stage: "connecting to peer" });
+      await client.connectPeer(ch.from, { address: nodes[ch.to]!.address });
+      await waitForPeer(client, ch.from, nodes[ch.to]!.pubkey, config);
+
+      step.update({ stage: "opening channel" });
+      await openChannel(client, ch.from, nodes[ch.to]!.pubkey, ch.capacity, ch.asset, udt, config);
+
+      step.update({ stage: "waiting for ChannelReady" });
+      await waitChannelReady(client, ch.from, nodes[ch.to]!.pubkey, config);
+    } catch (error) {
+      step.end({ error: error instanceof Error ? error.message : String(error) });
+      throw error;
+    }
+    step.end({ ready: true }, await captureChannels(client, nodes));
   }
 
   await runSeedSteps(scenario, client, store, config, runId, nodes, udtByNode);
@@ -256,6 +269,7 @@ export async function runSeedSteps(
       case "send_payment": {
         const asset: Asset = step.asset ?? "CKB";
         const input = { from: step.from, to: step.to, amount: step.amount, asset };
+        const record = store.beginStep("send_payment", input);
         try {
           let paymentParams: Record<string, unknown>;
           if (step.useInvoice) {
@@ -269,18 +283,14 @@ export async function runSeedSteps(
           }
           // send_payment can fail synchronously (insufficient outbound / expired invoice) — record it, don't throw.
           const res = (await client.rawCall(step.from!, "send_payment", [paymentParams])) as { payment_hash: string };
+          record.update({ payment_hash: res.payment_hash, status: "Inflight" });
           const final = await waitPayment(client, step.from!, res.payment_hash, config);
-          store.recordStep("send_payment", input, final, await captureChannels(client, nodes));
+          record.end(final, await captureChannels(client, nodes));
         } catch (e) {
           const message = e instanceof Error ? e.message : String(e);
           const firstHop = scenario.channels.find((c) => c.from === step.from)?.to ?? step.to!;
           const peerConnected = await isPeerConnected(client, step.from!, pubkey[firstHop]!).catch(() => true);
-          store.recordStep(
-            "send_payment",
-            input,
-            { error: message, peerConnected },
-            await captureChannels(client, nodes),
-          );
+          record.end({ error: message, peerConnected }, await captureChannels(client, nodes));
         }
         break;
       }

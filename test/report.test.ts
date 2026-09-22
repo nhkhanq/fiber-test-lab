@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildReportModel, formatAmount } from "../lib/report/model";
 import { renderReport, renderRunList } from "../lib/report/render";
 import { startUiServer } from "../lib/report/server";
-import { RunLogSchema, type RunLog } from "../lib/runlog/store";
+import { RunLogSchema, RunLogStore, type RunLog } from "../lib/runlog/store";
 
 /** Unit tests: no Docker, no RPC. The run viewer is a pure function of a run-log. */
 
@@ -135,6 +135,61 @@ describe("buildReportModel", () => {
     expect(model.edges).toEqual([]);
     expect(model.slowestRpcMs).toBeNull();
     expect(renderReport(model)).toContain("No channel snapshot");
+  });
+});
+
+describe("running steps", () => {
+  it("marks a step that has begun but not ended, and surfaces its progress", () => {
+    const log = runLog({ status: "running", finishedAt: null });
+    log.steps.push({
+      action: "docker_up",
+      input: { services: ["ckb", "alice", "bob"] },
+      result: { latest: "Container flab_x_ckb Started", imagesBuilt: 2, containersStarted: 1 },
+      at: new Date(Date.now() - 4000).toISOString(),
+      status: "running",
+    });
+    const step = buildReportModel(log).steps.at(-1)!;
+    expect(step.running).toBe(true);
+    expect(step.progress).toBe("Container flab_x_ckb Started");
+    // A running step's bar has to grow from its start to now, not sit at zero.
+    expect(step.durationMs).toBeGreaterThan(3000);
+  });
+
+  it("reports health progress while waiting for READY", () => {
+    const log = runLog({ status: "running", finishedAt: null });
+    log.steps.push({
+      action: "wait_ready",
+      input: { containers: ["a", "b", "c", "d"] },
+      result: { ready: ["a", "b"], pending: ["c", "d"] },
+      at: new Date().toISOString(),
+      status: "running",
+    });
+    expect(buildReportModel(log).steps.at(-1)!.summary).toBe("2/4 healthy");
+  });
+
+  it("changes the fingerprint when only a running step's progress moves", () => {
+    const base = runLog({ status: "running", finishedAt: null });
+    base.steps.push({
+      action: "docker_up",
+      input: { services: ["ckb"] },
+      result: { latest: "Image flab_x-ckb Building" },
+      at: "2026-09-22T10:00:25.000Z",
+      status: "running",
+    });
+    const before = buildReportModel(base).fingerprint;
+
+    (base.steps.at(-1)!.result as Record<string, unknown>).latest = "Container flab_x_ckb Started";
+    expect(buildReportModel(base).fingerprint).not.toBe(before);
+  });
+
+  it("closes any step left running when the run ends", async () => {
+    const store = RunLogStore.create({ runId: "finish-test", scenario: "s", network: "n" });
+    const handle = store.beginStep("docker_up");
+    handle.update({ latest: "Image Building" });
+    store.finish("failed", "boom");
+    expect(store.data.steps[0]!.status).toBe("done");
+    expect(store.data.steps[0]!.endedAt).toBeTypeOf("string");
+    expect(buildReportModel(store.data).steps[0]!.running).toBe(false);
   });
 });
 
