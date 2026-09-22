@@ -280,6 +280,31 @@ describe("topology rendering", () => {
   });
 });
 
+describe("a run that is still building", () => {
+  it("does not blame the run-log's age when a channel simply has not opened yet", () => {
+    const log = runLog({ status: "running", finishedAt: null });
+    log.steps = [
+      {
+        action: "wait_ready",
+        input: { containers: ["a"] },
+        result: { ready: [], pending: ["a"] },
+        at: "2026-09-22T10:00:05.000Z",
+        status: "running",
+      },
+    ];
+    const html = renderReport(buildReportModel(log));
+    expect(html).toContain("still building");
+    expect(html).not.toContain("predates");
+  });
+
+  it("shows elapsed time rather than an em dash while running", () => {
+    const log = runLog({ status: "running", finishedAt: null });
+    const html = renderReport(buildReportModel(log));
+    expect(html).toContain("elapsed");
+    expect(html).toContain("20.0s"); // startedAt -> the last recorded step
+  });
+});
+
 describe("ui server", () => {
   it("binds loopback only and serves the run list, a report and its JSON", async () => {
     const server = await startUiServer();
