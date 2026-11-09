@@ -6,7 +6,7 @@ Danh mục scenario của Fiber Test Lab kèm **kết quả verify thật** và 
 
 | Thành phần | Version | Ghi chú |
 |---|---|---|
-| FNN (Fiber Network Node) | **0.8.0** (`335a74a`, 2026-04-03) | `fiber-lab.config.ts` → `fnnVersion`; fiber-scripts lấy từ tag `v0.8.0` |
+| FNN (Fiber Network Node) | **0.9.1** (`9a561b3`, 2026-09-10) | `fiber-lab.config.ts` → `fnnVersion` (`FIBER_LAB_FNN_VERSION` ghi đè); fiber-scripts lấy từ cùng tag, giống hệt 0.8.0 |
 | `@ckb-ccc/core` | `0.0.0-canary-20260330023358` | pin cứng trong `package.json` |
 | `@ckb-ccc/fiber` | `0.0.0-canary-20260330023358` | pin cứng trong `package.json` |
 | CKB (devnet) | **v0.207.0** (`nervos/ckb`) | khớp genesis offckb 0.4.7 |
@@ -17,10 +17,11 @@ Danh mục scenario của Fiber Test Lab kèm **kết quả verify thật** và 
 | Setting | Giá trị | Ý nghĩa |
 |---|---|---|
 | `pollIntervalMs` | 1000 | nhịp poll RPC |
-| `pollTimeoutMs` | 60000 | timeout chờ READY/ChannelReady/payment (devnet confirm ~36–40s) |
+| `pollTimeoutMs` | 60000 | timeout chờ READY/ChannelReady/payment |
+| `blockIntervalMs` | 200 | nhịp lab tự sinh block trong lúc chờ on-chain |
 | `dockerNetworkPrefix` | `flab` | network = `flab_<run-id>` |
 | `keepRunOnFailure` | false | lỗi → tự teardown (trừ `--keep`) |
-| `maxNodesPerScenario` | 3 | giới hạn tài nguyên máy (3 account pre-fund genesis) |
+| `maxNodesPerScenario` | 5 | ghi đè có chủ đích mức mặc định 3 (BR-ISO-003); genesis pre-fund 6 account |
 
 Gossip interval hạ xuống **2000ms** (mặc định FNN 60s) để multi-hop route lan nhanh & tất định — xem E5-2.
 
@@ -35,7 +36,7 @@ Viewer chỉ **đọc** run-log, không gọi RPC vào node — sau `reset` cont
 
 ## Giới hạn
 
-- **Tối đa 3 node/scenario** — genesis pre-fund đúng 3 account (10 tỷ CKB/node), cũng là mức hợp lý cho 1 máy.
+- **Tối đa 5 node/scenario** — trên 3 node sẽ in cảnh báo; genesis pre-fund 6 account (10 tỷ CKB/node).
 - **Kênh single-funded** — chỉ bên `from` cấp vốn; `capacity` verify = `local+remote balance + reserve(99 CKB)`.
 - **Devnet ≠ mainnet** — xem `docs/trade-offs.md`.
 
@@ -47,13 +48,13 @@ Mọi payment dùng keysend (`target_pubkey` + `amount`, không cần invoice). 
 - **Topology:** alice → bob (1 kênh, capacity 500 CKB).
 - **Seed:** alice trả bob 100 CKB.
 - **Expect:** `status: succeeded`.
-- **Kết quả thật:** payment `Success`, **fee `0x0`** (kênh trực tiếp, 0 hop). alice 401→301, bob 0→100. **Tất định qua 3 run** (E5-1).
+- **Kết quả thật:** payment `Success`, **fee `0x0`** (kênh trực tiếp, 0 hop). alice 401→301, bob 0→100. Mở kênh ~3–4,5s (trước đây ~35s). Kiểm tra theo step: fee, số dư tuyệt đối và độ thay đổi của cả hai bên.
 
 ### `two-hop-route`
 - **Topology:** alice → bob, bob → charlie (2 kênh, mỗi kênh 500 CKB).
 - **Seed:** alice trả charlie 100 CKB (định tuyến qua bob).
 - **Expect:** `status: succeeded`, `routeHops: 1`.
-- **Kết quả thật:** payment `Success`, **fee `0x989680`** = 0.1 CKB (phí định tuyến của bob) ⇒ bằng chứng đi qua 1 hop trung gian. `get_payment` không trả route nên fee là tín hiệu hop duy nhất (E5-2).
+- **Kết quả thật:** payment `Success`, **fee `0x989680`** = 0.1 CKB (phí định tuyến của bob) ⇒ bằng chứng đi qua 1 hop trung gian. Bản release của `get_payment` không trả route nên fee là tín hiệu hop duy nhất (E5-2). Kiểm tra theo step: alice mất 100,1 CKB, charlie nhận 100 CKB.
 
 ### `insufficient-capacity`
 - **Topology:** alice → bob (1 kênh, capacity 500 CKB ⇒ alice outbound ~401 CKB).
@@ -77,13 +78,13 @@ Mọi payment dùng keysend (`target_pubkey` + `amount`, không cần invoice). 
 - **Topology:** alice → bob (1 kênh 500 CKB).
 - **Seed:** alice trả bob 300, rồi **bob trả alice 100** (chiều ngược, dùng inbound bob vừa nhận).
 - **Expect:** `status: succeeded`.
-- **Kết quả thật:** cả 2 payment Success — chứng minh kênh **hai chiều** (bob chi tiêu được sau khi nhận).
+- **Kết quả thật:** cả 2 payment Success — chứng minh kênh **hai chiều** (bob chi tiêu được sau khi nhận). Số dư sau từng payment được kiểm tra: 101/300 rồi 201/200.
 
 ### `channel-drain`
 - **Topology:** alice → bob (1 kênh 500 CKB → alice outbound ~401).
 - **Seed:** alice trả bob 100 **× 5 lần**.
 - **Expect:** `status: failed`, `reason: insufficient_outbound`.
-- **Kết quả thật:** 4 payment đầu Success (401→…→1), payment thứ 5 fail `max outbound liquidity 1 CKB insufficient` → cạn outbound dần theo chuỗi (bằng chứng determinism của phép tính capacity).
+- **Kết quả thật:** 4 payment đầu Success (401→…→1), payment thứ 5 fail `max outbound liquidity 1 CKB insufficient` → cạn outbound dần theo chuỗi (bằng chứng determinism của phép tính capacity). Mỗi payment có kỳ vọng riêng, nên payment nào lệch sẽ được chỉ đích danh.
 
 ### `two-hop-bottleneck`
 - **Topology:** alice → bob (500), bob → charlie (**200** → bob outbound tới charlie chỉ ~101).
@@ -100,3 +101,5 @@ Mọi payment dùng keysend (`target_pubkey` + `amount`, không cần invoice). 
 ## Exit codes (mọi lệnh CLI)
 
 `0` ok · `1` lỗi config/validation · `2` lỗi runtime (docker/RPC) · `3` expect không khớp.
+
+Chạy cả danh mục: `fiber-lab test --all` (9 scenario, ~5 phút trên máy 12 CPU, kể cả dựng và dọn từng cụm). Chọn theo nhóm: `fiber-lab test --tag smoke`.

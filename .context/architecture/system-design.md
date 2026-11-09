@@ -21,7 +21,7 @@ tags: [typescript, docker-compose, fiber-node, ckb-devnet, cli, testing, local]
 | Underlying docker infrastructure | **fork of `fiber-demo-startup`** (`demo-0.8`) | Already dockerizes the CKB dev chain + several FNN nodes + a transfer container — no need to build from scratch (see section 2b) |
 | Container orchestration | Docker + Docker Compose (v2, `docker compose`) | Orchestrates N Fiber nodes + the CKB dev chain, isolated on an internal network |
 | Fiber node | The official FNN binary (pinned version) — image from demo-startup | A REAL node, not a protocol simulation — test results reflect real behavior |
-| CKB devnet | A self-built CKB dev chain (`nervos/ckb:v0.207.0` image + a baked `dev.toml` genesis) | A local devnet, funded via **genesis pre-funding** (3 fixed keys, 10 billion CKB per node) — NOT using offckb/a transfer container. Compatible with the offckb 0.4.7 convention. |
+| CKB devnet | A self-built CKB dev chain (`nervos/ckb:v0.207.0` image + a baked `dev.toml` genesis) | A local devnet, funded via **genesis pre-funding** (6 fixed keys, 10 billion CKB per node), with no miner by default: the lab mines through `generate_block` — NOT using offckb/a transfer container. Compatible with the offckb 0.4.7 convention. |
 | Calling Fiber RPC | `@ckb-ccc/fiber` (the official SDK) | The SDK recommended by the hackathon, avoids hand-writing raw JSON-RPC |
 | Test framework | Vitest | Lightweight, fast, used for `test-kit` and example tests |
 | Storing the run-log | A JSON file (fs) | Short data lifecycle — no need for Postgres (see section 8) |
@@ -94,6 +94,7 @@ Commands (full spec in `api/cli-spec.md`):
 - `fiber-lab reset [run-id]` — teardown + remove state
 - `fiber-lab logs <run-id>` — print the run-log
 - `fiber-lab list` — list available scenarios + running runs
+- `fiber-lab test` — run scenarios end to end and report (JUnit, HTML)
 
 ### 3.2 `topology/` — scenarios + dynamic compose
 - `scenarios/*.yaml` — each file is one scenario (tier-1 settings, something a developer can write by hand). Schema in `data-dictionary/scenario-schema.md`.
@@ -103,13 +104,20 @@ Commands (full spec in `api/cli-spec.md`):
 - `lib/fiber/client.ts` — wraps `@ckb-ccc/fiber`, calls RPC on a specific node by name
 - `lib/docker/orchestrator.ts` — generates compose, `up`/`down`, isolates the network by run-id
 - `lib/scenario/loader.ts` — reads + validates YAML (zod)
-- `lib/scenario/seeder.ts` — executes the `seed` section (open channels, create invoices, kill containers...)
+- `lib/ckb/chain.ts` — drives the devnet: mining, epochs, indexer sync, on-chain capacity, genesis facts
+- `lib/docker/images.ts` — one shared image per version, tagged by a digest of the build context
+- `lib/scenario/runtime.ts` — every action a scenario can take; the YAML seed and the test-kit both call it
+- `lib/scenario/assertions.ts` — pure evaluation of expectations
+- `lib/scenario/seeder.ts` — re-runs a seed against a live run (`fiber-lab seed`)
+- `lib/scenario/suite.ts` — the `fiber-lab test` runner and JUnit output
 - `lib/runlog/store.ts` — write/read the run-log JSON
 
 ### 3.4 `test-kit/` — assertion helpers (used from Vitest)
 - `expectPaymentSucceeds(ctx, paymentId)`
 - `expectPaymentFails(ctx, paymentId, reason)`
 - `expectChannelState(ctx, channelId, { status, capacity })`
+- `expectBalance`, `expectFee`, `expectInvoiceStatus`, `expectOnchainCapacity`
+- `ctx.pay`, `ctx.payInvoice`, `ctx.newInvoice`, `ctx.openChannel`, `ctx.killNode`, `ctx.startNode`, `ctx.mine`, `ctx.advanceEpochs`
 - Internally these **poll** RPC on an interval + timeout (because FNN does not push events — see section 7).
 
 ### 3.5 `fiber-lab.config.ts` — global config (tier-2 settings)
@@ -118,8 +126,9 @@ Applies to EVERY scenario, set once by the developer:
 export default {
   pollIntervalMs: 1000,
   pollTimeoutMs: 30000,
+  blockIntervalMs: 200,        // how often the lab mines while waiting on-chain
   dockerNetworkPrefix: "flab",
-  fnnImage: "fnn:v0.x.y",      // pinned
+  fnnVersion: "0.9.1",         // pinned; FIBER_LAB_FNN_VERSION overrides it for a version matrix
   logLevel: "info",
   keepRunOnFailure: false,      // keep the container when a test fails, for debugging
 }
@@ -140,15 +149,17 @@ A developer who wants to add a new kind of failure creates a new `.yaml` file fo
 1. The CLI reads scenarios/two-hop-route.yaml
 2. loader.ts validates with zod -> on a bad schema: print a clear error, exit 1 (Docker untouched)
 3. generate a run-id (e.g. timestamp + a short random suffix) -> network name = flab_<run-id>
-4. orchestrator.ts generates dynamic compose: N fnn services (alice/bob/carol) + 1 CKB devnet,
-   all on network flab_<run-id>, container names prefixed by the run-id
-5. docker compose up -d -> wait for each node's healthcheck to pass (poll node_info)
-6. fund CKB via genesis pre-funding (3 fixed keys baked into dev.toml) -- no runtime faucet needed
-7. seeder.ts reads the `channels` section -> calls open_channel alice->bob, bob->carol,
-   waits for the channel to be READY (poll list_channels)
-8. seeder.ts reads the `seed` section -> executes it (e.g. send_payment alice->carol amount 100)
-9. store.ts writes the run-log JSON: {runId, scenario, steps[], rpcResponses[], startedAt}
-10. print the run-id to stdout for the developer/test-kit to use next
+4. orchestrator.ts builds or reuses the versioned images and generates dynamic compose: N fnn services
+   (alice/bob/carol) + 1 CKB devnet, all on network flab_<run-id>, container names prefixed by the run-id
+5. docker compose up -d ckb -> wait for it to be healthy, read block 0 for the genesis hashes, mine one block
+6. write each node's config (needs those hashes); accounts are funded by genesis (6 fixed keys baked into dev.toml)
+7. docker compose up -d -> wait for each node's healthcheck to pass (poll node_info)
+8. runtime.ts reads the `channels` section -> calls open_channel alice->bob, bob->carol,
+   mines until both sides report the channel READY (poll list_channels)
+9. runtime.ts reads the `seed` section -> executes it (e.g. send_payment alice->carol amount 100)
+   and evaluates each step's `expect`
+10. store.ts writes the run-log JSON: {runId, scenario, steps[], rpcResponses[], startedAt}
+11. print the run-id to stdout for the developer/test-kit to use next
 ```
 
 ## 6. Isolation by run-id (avoiding collisions)
@@ -186,12 +197,17 @@ FNN does not push an event when a channel's or payment's status changes -- you m
 fiber-test-lab/                          
 ├── cli/
 │   ├── index.ts                         — entry point (commander)
-│   └── commands/                        — up.ts, seed.ts, reset.ts, logs.ts, list.ts, ui.ts
+│   └── commands/                        — up.ts, seed.ts, test.ts, reset.ts, logs.ts, list.ts, ui.ts
 ├── lib/
+│   ├── ckb/chain.ts                     — the lab-driven devnet
 │   ├── fiber/client.ts
 │   ├── docker/orchestrator.ts
+│   ├── docker/images.ts
 │   ├── scenario/loader.ts
+│   ├── scenario/runtime.ts
+│   ├── scenario/assertions.ts
 │   ├── scenario/seeder.ts
+│   ├── scenario/suite.ts
 │   ├── runlog/store.ts
 │   └── report/                          — the run viewer (added v1.1.0)
 │       ├── model.ts                     — pure RunLog -> ReportModel

@@ -3,6 +3,63 @@
 Versions follow [semver](https://semver.org/). Verification results only hold for the pinned FNN
 and `@ckb-ccc/fiber` versions recorded in [`docs/scenario-catalog.md`](docs/scenario-catalog.md).
 
+## Unreleased
+
+### Added
+
+- **The lab drives the chain.** No miner runs by default; blocks are mined through `generate_block`
+  only while something is waiting on-chain, so opening a channel takes about 3 s instead of 35 s and
+  the chain stands still between steps. New seed actions `mine` and `advance_epochs`, and
+  `chain.mining: auto` for an application that opens channels by itself.
+- **Per-step expectations.** Any step can declare `expect`: payment status, failure reason and fee,
+  channel balances (absolute or as a change), channel state, invoice status and on-chain capacity. A
+  new `assert` action checks state at a point in the sequence. Results are recorded on each step.
+- **Programmatic test-kit.** `setupScenario` accepts an inline scenario, and `ctx` gains `pay`,
+  `payInvoice`, `newInvoice`, `openChannel`, `killNode`, `startNode`, `mine`, `advanceEpochs`,
+  `balances` and `onchainCapacity`, plus `expectBalance`, `expectFee`, `expectInvoiceStatus` and
+  `expectOnchainCapacity`. Everything lands in the run-log.
+- **`fiber-lab test`** runs scenarios by name, `--all` or `--tag`, tears each one down and writes
+  JUnit and HTML reports. Scenarios gain `tags`.
+- **CI.** A reusable GitHub Action (`action.yml`), a CI workflow with an FNN version matrix, and a
+  workflow publishing `linux/amd64` and `linux/arm64` images to GHCR.
+- **Up to 5 nodes per scenario**, with a warning above 3; genesis now funds 6 accounts.
+- A Docker-free unit suite: `npm run test:unit`. `npm run test:integration` runs the rest.
+- `reset --images` deletes the images the lab has built.
+- The run-log records the FNN and CKB versions each run used.
+
+### Changed
+
+- **FNN 0.9.1** (was 0.8.0). `fnnVersion` in `fiber-lab.config.ts` now really selects the release,
+  and `FIBER_LAB_FNN_VERSION` overrides it.
+- **One shared image per version**, tagged by a digest of the build context, instead of one set per
+  run. Image builds are a separate `build_images` step.
+- The CKB devnet starts before the FNN nodes, and genesis hashes are read from the running chain
+  instead of being kept as constants.
+- A channel counts as open only when both sides report it ready, and payments wait for gossip about
+  every channel they could route over rather than only the target's.
+- RPC calls time out instead of hanging on a frozen node.
+
+### Removed
+
+- The `push` channel field, which was accepted but never used; FNN's `open_channel` has no such
+  parameter. Unknown keys are now a validation error everywhere.
+- The `expect.reason` values no classifier could produce: `insufficient_inbound`,
+  `amount_out_of_range`, `asset_mismatch`, `channel_not_ready` and `reserve_violation`. A scenario
+  using one could only ever report a mismatch.
+
+### Fixed
+
+- `expect.reason` now reads payments that fail after being accepted (`failed_error`), which used to
+  be reported as a mismatch.
+- A scenario with a top-level `expect` and no payment is rejected instead of passing unchecked.
+- Fractional amounts are validated, and converted exactly, instead of crashing mid-run.
+- `new_invoice` honours `asset`.
+- `reset` removes the run's working directory, and `reset --all` no longer rewrites runs that were
+  already reset.
+- The CKB image no longer depends on the Ubuntu 20.04 apt archive, which could fail a fresh build.
+- `peer_offline` no longer misfires for a payer with no channel to the target.
+- `cli/index.ts` is checked out with LF on Windows, so its shebang works.
+
 ## 1.1.0 — 2026-09-22
 
 ### Added

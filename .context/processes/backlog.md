@@ -209,6 +209,18 @@ tags: [backlog, tasks, tickets]
 
 ---
 
+## EPIC E10 — Core engine upgrade
+
+> Everything the next scenarios depend on. See `CHANGELOG.md`.
+
+**E10-1** ✅ · Lab-driven chain: no background miner, `mine` / `advance_epochs`, indexer sync, optional `chain.mining: auto` · est 3
+**E10-2** ✅ · Per-step `expect` (status, reason, fee, balances and deltas, channels, invoices, on-chain) + `assert` · est 3
+**E10-3** ✅ · Programmatic test-kit: `ctx.pay`, `ctx.openChannel`, inline scenarios, `expectBalance`/`expectFee`/`expectInvoiceStatus`/`expectOnchainCapacity` · est 3
+**E10-4** ✅ · Up to 5 nodes (6 funded genesis accounts), genesis hashes derived at runtime · est 2
+**E10-5** ✅ · `fiber-lab test` (JUnit, HTML, tags), GitHub Action, CI workflow, multi-arch image workflow · est 3
+**E10-6** ✅ · Docker-free unit tests for schema, verification, classification, chain driver, compose and reporting · est 2
+**E10-7** ✅ · FNN 0.9.1, real `fnnVersion` config, shared versioned images · est 2
+
 ## Total estimate
 
 - Must-have (E0–E7): ~65 points

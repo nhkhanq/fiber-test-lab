@@ -20,24 +20,33 @@ tags: [cli, commander, commands]
 Build the topology for a scenario.
 - `<scenario>` — a file name under `topology/scenarios/` (no `.yaml` extension needed)
 - `--keep` — do not tear down automatically on error (for debugging)
-- **What it does:** validate the YAML → generate a run-id → generate dynamic compose → `docker compose up` → wait for nodes to be ready → genesis pre-fund (no runtime faucet) → open channels per `channels` → wait for channels to be READY.
+- **What it does:** validate the YAML → generate a run-id → build or reuse the versioned images → start the CKB devnet → read its genesis → start the FNN nodes → open channels per `channels`, mining until both sides report READY → run the seed.
 - **Output:** prints the `run-id` (used by later commands). `--json` → `{ runId, network, nodes: [...] }`.
 - **Errors:** bad schema → exit 1; docker/RPC error → exit 2, the run-log records the cause.
 
 ### `fiber-lab seed <scenario> [--run <run-id>] [--json]`
 Run the scenario's `seed` steps against a running run.
 - Without `--run` → uses the most recent run of that scenario.
-- **What it does:** executes `SeedStep[]` sequentially (send_payment, new_invoice, kill_node, wait...), recording each step to the run-log.
+- **What it does:** executes `SeedStep[]` sequentially (send_payment, new_invoice, kill_node, wait...), recording each step to the run-log. Expectations are not evaluated and `assert` steps are skipped: they describe the first run.
 - **Output:** the result of each step. `--json` → an array of `StepRecord`.
 
 > Note: `up` can run the seed automatically if the scenario has a `seed` section. The standalone `seed` command is for re-running or manually controlling it.
 
-### `fiber-lab reset [run-id] [--all]`
+### `fiber-lab reset [run-id] [--all] [--images]`
 Teardown and cleanup.
-- `reset <run-id>` — cleans up exactly one run (docker down + remove network + remove port map).
+- `reset <run-id>` — cleans up exactly one run (docker down + remove network + remove port map + remove its working directory).
 - `reset --all` (or `reset` with no argument) — cleans up EVERY Test Lab run.
+- `--images` — also deletes the images the lab has built (they are shared by runs, so a normal reset keeps them).
 - **Output:** the list of runs that were cleaned up.
 - **Guarantee:** no leftover containers/networks — even if a prior `up` failed partway through.
+
+### `fiber-lab test [scenarios...] [--all] [--tag <tag...>] [--junit <path>] [--html] [--keep] [--json]`
+Run scenarios one at a time, tear each one down, and report the results.
+- Selection: scenario names or paths, `--all` for every built-in scenario, `--tag` for the built-in scenarios carrying any of the tags. At least one is required. Everything selected is validated before the first scenario starts.
+- `--junit <path>` — also write a JUnit XML report.
+- `--html` — write each run's report to `.fiber-lab/runs/<run-id>.html`.
+- `--keep` — keep the containers of a scenario that does not pass.
+- **Exit code:** `0` all passed, `3` at least one mismatch, `2` at least one could not run (takes priority), `1` nothing valid was selected.
 
 ### `fiber-lab logs <run-id> [--json] [--rpc] [--html [path]]`
 Print the run-log.
@@ -69,4 +78,4 @@ const ctx = await setupScenario("insufficient-capacity")   // ~ up + seed
 await expectPaymentFails(ctx, ctx.lastPaymentId, "insufficient_outbound")
 await ctx.reset()
 ```
-`ctx` includes: `runId`, a function to call RPC by node name, `lastPaymentId`, `reset()`.
+`ctx` includes: `runId`, a function to call RPC by node name, `lastPaymentId`, `reset()`, and methods that act on the run and land in its run-log: `pay`, `payInvoice`, `newInvoice`, `openChannel`, `killNode`, `startNode`, `mine`, `advanceEpochs`, `balances`, `onchainCapacity`. `setupScenario` also accepts a scenario object, validated by the same rules as a file.

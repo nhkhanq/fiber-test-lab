@@ -59,10 +59,9 @@ FNN's JSON-RPC 2.0 interface. The main methods Test Lab calls:
 A stablecoin on the CKB testnet (a UDT). Used for the multi-asset scenario (v2 stretch).
 
 ## ErrorCategory (Test Lab's normalized error codes)
-The set of error codes Test Lab uses in `expect.reason`. The list:
-`insufficient_outbound`, `insufficient_inbound`, `no_route_found`, `peer_offline`, `invoice_expired`, `amount_out_of_range`, `asset_mismatch`, `channel_not_ready`, `reserve_violation`.
+The set of error codes Test Lab uses in `expect.reason`: `insufficient_outbound`, `no_route_found`, `peer_offline`, `invoice_expired`. The schema accepts only categories a classifier can produce.
 
-FNN always returns JSON-RPC `code: -32000` (generic), so failures must be classified by a **substring of the `message`** — see `lib/scenario/errorCategory.ts::mapError()` and `docs/hands-on/rpc-notebook.md` sections 8/9. Mappings ALREADY verified against a real node (FNN 0.8.0):
+FNN always returns JSON-RPC `code: -32000` (generic), so failures must be classified by a **substring of the `message`** — see `lib/scenario/errorCategory.ts::mapError()` and `docs/hands-on/rpc-notebook.md` sections 8/9. Mappings verified against a real node (FNN 0.8.0, re-verified on 0.9.1):
 
 | ErrorCategory | Classification signal | Verified in |
 |---|---|---|
@@ -71,7 +70,7 @@ FNN always returns JSON-RPC `code: -32000` (generic), so failures must be classi
 | `peer_offline` | **the target is no longer in `list_peers`** (an offline peer produces a message IDENTICAL to `insufficient_outbound`'s "max outbound liquidity 0" — the two must be distinguished by connectivity, not by message) | E8-2 |
 | `invoice_expired` | message: `invoice is expired` (`InvalidParameter: Failed to validate payment request`) | E8-1 |
 
-Because `peer_offline` shares its message with `insufficient_outbound`, classification goes through `classifyFailure()`: it prioritizes `peerConnected === false` -> `peer_offline`, and only falls back to `mapError()` by message otherwise. The remaining categories (`amount_out_of_range`, `asset_mismatch`, `channel_not_ready`, `reserve_violation`, `insufficient_inbound`) are **not yet verified**. Recording them officially in `decisions-log.md` requires human confirmation.
+Because `peer_offline` shares its message with `insufficient_outbound`, classification goes through `classifyFailure()`: it prioritizes `peerConnected === false` -> `peer_offline`, and only falls back to `mapError()` by message otherwise. Candidates with no scenario that reproduces them yet (`amount_out_of_range`, `asset_mismatch`, `channel_not_ready`, `reserve_violation`, `insufficient_inbound`) are not accepted until one does. Recording them officially in `decisions-log.md` requires human confirmation.
 
 ---
 
