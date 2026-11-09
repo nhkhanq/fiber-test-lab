@@ -95,6 +95,8 @@ Commands (full spec in `api/cli-spec.md`):
 - `fiber-lab logs <run-id>` — print the run-log
 - `fiber-lab list` — list available scenarios + running runs
 - `fiber-lab test` — run scenarios end to end and report (JUnit, HTML)
+- `fiber-lab env`, `node`, `peer`, `chain`, `channel` — describe a live run and force states on it, for a test written in any language
+- `fiber-lab doctor` — check that the machine can run the lab
 
 ### 3.2 `topology/` — scenarios + dynamic compose
 - `scenarios/*.yaml` — each file is one scenario (tier-1 settings, something a developer can write by hand). Schema in `data-dictionary/scenario-schema.md`.
@@ -109,6 +111,8 @@ Commands (full spec in `api/cli-spec.md`):
 - `lib/scenario/runtime.ts` — every action a scenario can take; the YAML seed and the test-kit both call it
 - `lib/scenario/assertions.ts` — pure evaluation of expectations
 - `lib/scenario/seeder.ts` — re-runs a seed against a live run (`fiber-lab seed`)
+- `lib/scenario/attach.ts` — rebuilds a runtime for a run that is already up, from its run-log
+- `lib/scenario/environment.ts` — describes a run to another program
 - `lib/scenario/suite.ts` — the `fiber-lab test` runner and JUnit output
 - `lib/runlog/store.ts` — write/read the run-log JSON
 
@@ -142,6 +146,8 @@ export default {
 | **Tier 2 — global** | `fiber-lab.config.ts` | System-wide behavior: timeout, poll interval, prefix, image version | The developer edits it once, it applies everywhere |
 
 A developer who wants to add a new kind of failure creates a new `.yaml` file following the schema, without touching the CLI. `zod` guarantees an immediate, clear error if the file doesn't match the shape.
+
+A project using the package adds a third layer, `fiber-lab.config.json` in its working directory. `FIBER_LAB_*` environment variables and `setupScenario(..., { config })` override that in turn.
 
 ## 5. Data flow — `fiber-lab up two-hop-route`
 
@@ -195,9 +201,10 @@ FNN does not push an event when a channel's or payment's status changes -- you m
 
 ```
 fiber-test-lab/                          
+├── bin/fiber-lab.mjs                    — the installed binary; a plain-JS launcher so it starts on every OS
 ├── cli/
 │   ├── index.ts                         — entry point (commander)
-│   └── commands/                        — up.ts, seed.ts, test.ts, reset.ts, logs.ts, list.ts, ui.ts
+│   └── commands/                        — up.ts, seed.ts, test.ts, control.ts, reset.ts, logs.ts, list.ts, ui.ts
 ├── lib/
 │   ├── ckb/chain.ts                     — the lab-driven devnet
 │   ├── fiber/client.ts
@@ -208,6 +215,9 @@ fiber-test-lab/
 │   ├── scenario/assertions.ts
 │   ├── scenario/seeder.ts
 │   ├── scenario/suite.ts
+│   ├── scenario/attach.ts
+│   ├── scenario/environment.ts
+│   ├── docker/doctor.ts
 │   ├── runlog/store.ts
 │   └── report/                          — the run viewer (added v1.1.0)
 │       ├── model.ts                     — pure RunLog -> ReportModel

@@ -18,7 +18,7 @@ tags: [scenario, polling, isolation, cleanup]
 
 **BR-SCN-004:** `expect.reason` is only valid when `expect.status === "failed"`.
 
-**BR-SCN-005:** A scenario must declare at least one expectation, on the scenario or on a step. A top-level `expect` requires at least one `send_payment`. A scenario that checks nothing must not be able to pass.
+**BR-SCN-005:** A scenario with a seed must declare at least one expectation, on the scenario or on a step. A top-level `expect` requires at least one `send_payment`. A scenario with no seed is an environment for something else to test against: `up` accepts it, `test` reports it as failed because nothing was checked. A scenario that checks nothing must not be able to pass.
 
 **BR-SCN-006:** Unknown keys in a scenario are a validation error, and amounts must be exact in base units. `expect.reason` accepts only the categories a classifier can produce.
 
@@ -57,6 +57,8 @@ tags: [scenario, polling, isolation, cleanup]
 **BR-POL-004:** Every RPC call must be recorded to the run-log (method/params/response/error) — even on success — so it can be debugged after a reset.
 
 **BR-POL-005:** A wait for a payment that runs out of time reports `timeout`, with the last status seen. It is not a failure and must never be reported as one: the payment may still settle.
+
+**BR-POL-006:** `up` returns only after gossip has reached every node, so a client outside the lab can route its first payment as soon as `up` does.
 
 ## Cleanup Rules
 
