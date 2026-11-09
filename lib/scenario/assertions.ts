@@ -9,6 +9,8 @@ import type {
   InvoiceCheck,
   InvoiceStatus,
   OnchainCheck,
+  PaymentState,
+  PeerCheck,
   StepExpectation,
 } from "./schema";
 
@@ -55,16 +57,37 @@ function parseAmount(value: unknown): bigint | null {
 }
 
 export interface PaymentResult {
+  payment_hash?: string;
   status?: string;
   fee?: unknown;
   error?: unknown;
   failed_error?: unknown;
   peerConnected?: boolean;
+  timedOut?: boolean;
 }
 
-/** A payment that never got a hash (rejected synchronously) has no status, and has failed. */
-export function paymentState(result: PaymentResult | null): "succeeded" | "failed" {
-  return result?.status === "Success" ? "succeeded" : "failed";
+/** Four outcomes, because a payment we stopped waiting for has not failed: it may still settle.
+ *  A payment rejected before it got a hash has no status, and has failed. */
+export function paymentState(result: PaymentResult | null): PaymentState {
+  if (result?.status === "Success") return "succeeded";
+  if (result?.timedOut === true) return "timeout";
+  if (result?.status === "Inflight" || result?.status === "Created") return "inflight";
+  return "failed";
+}
+
+/** A refusable step is expected to work unless the scenario says it should be refused. */
+export function evaluateRefusal(action: string, expected: string | undefined, actual: string | null): CheckResult[] {
+  if (expected !== undefined) {
+    return [
+      {
+        check: `${action} error`,
+        expected,
+        actual: actual ?? "no error",
+        match: actual !== null && actual.toLowerCase().includes(expected.toLowerCase()),
+      },
+    ];
+  }
+  return actual === null ? [] : [{ check: action, expected: "no error", actual, match: false }];
 }
 
 export function evaluatePayment(
@@ -90,19 +113,27 @@ export function evaluatePayment(
 interface Balances {
   local: bigint;
   remote: bigint;
+  offered: bigint;
+  received: bigint;
 }
 
 function balancesOf(snapshots: ChannelSnapshot[], check: BalanceCheck): Balances | null {
   const channels = snapshots.filter(
-    (s) => s.node === check.node && s.asset === check.asset && (check.peer === undefined || s.peer === check.peer),
+    (s) =>
+      s.node === check.node &&
+      s.asset === check.asset &&
+      s.state !== "Closed" &&
+      (check.peer === undefined || s.peer === check.peer),
   );
   if (channels.length === 0) return null;
   return channels.reduce<Balances>(
     (sum, c) => ({
       local: sum.local + (parseAmount(c.localBalance) ?? 0n),
       remote: sum.remote + (parseAmount(c.remoteBalance) ?? 0n),
+      offered: sum.offered + (parseAmount(c.offeredBalance) ?? 0n),
+      received: sum.received + (parseAmount(c.receivedBalance) ?? 0n),
     }),
-    { local: 0n, remote: 0n },
+    { local: 0n, remote: 0n, offered: 0n, received: 0n },
   );
 }
 
@@ -127,6 +158,12 @@ export function evaluateBalances(
     if (check.remote !== undefined) {
       out.push(amountCheck(`${label} remote balance`, current?.remote ?? null, check.remote, check.asset));
     }
+    if (check.offered !== undefined) {
+      out.push(amountCheck(`${label} offered in TLCs`, current?.offered ?? null, check.offered, check.asset));
+    }
+    if (check.received !== undefined) {
+      out.push(amountCheck(`${label} received in TLCs`, current?.received ?? null, check.received, check.asset));
+    }
     if (check.localDelta !== undefined) {
       out.push(amountCheck(`${label} local balance change`, delta("local"), check.localDelta, check.asset));
     }
@@ -139,12 +176,30 @@ export function evaluateBalances(
 
 export function evaluateChannels(checks: ChannelCheck[], now: ChannelSnapshot[]): CheckResult[] {
   return checks.map((check) => {
-    const states = now.filter((s) => s.node === check.node && s.peer === check.peer).map((s) => s.state);
+    const channels = now.filter((s) => s.node === check.node && s.peer === check.peer);
+    const expected = check.flags === undefined ? check.state : `${check.state} (${check.flags})`;
     return {
       check: `${check.node}->${check.peer} channel state`,
-      expected: check.state,
-      actual: states.length === 0 ? "no channel" : states.join(", "),
-      match: states.includes(check.state),
+      expected,
+      actual:
+        channels.length === 0
+          ? "no channel"
+          : channels.map((c) => (c.stateFlags ? `${c.state} (${c.stateFlags})` : c.state)).join(", "),
+      match: channels.some(
+        (c) => c.state === check.state && (check.flags === undefined || (c.stateFlags ?? "").includes(check.flags)),
+      ),
+    };
+  });
+}
+
+export function evaluatePeers(checks: PeerCheck[], connected: Record<string, boolean | null>): CheckResult[] {
+  return checks.map((check) => {
+    const actual = connected[`${check.node}->${check.peer}`] ?? null;
+    return {
+      check: `${check.node}->${check.peer} connected`,
+      expected: String(check.connected),
+      actual: actual === null ? "unknown" : String(actual),
+      match: actual === check.connected,
     };
   });
 }

@@ -137,6 +137,18 @@ function describeStep(step: StepRecord): string {
       return `${input.blocks} block(s), tip ${result.tip ?? "?"}`;
     case "advance_epochs":
       return `${input.epochs} epoch(s), tip ${result.tip ?? "?"}`;
+    case "await_payment":
+      return typeof result.status === "string" ? `${input.from} — ${result.timedOut === true ? "timed out" : result.status}` : String(input.from ?? "");
+    case "settle_invoice":
+    case "cancel_invoice":
+    case "pause_node":
+    case "resume_node":
+      return String(input.node ?? "");
+    case "close_channel":
+      return `${input.from} → ${input.to}${input.force === true ? ", forced" : ""}`;
+    case "disconnect_peer":
+    case "connect_peer":
+      return `${input.from} → ${input.to}`;
     case "assert": {
       const passed = (step.checks ?? []).filter((c) => c.match).length;
       return `${passed}/${step.checks?.length ?? 0} checks passed`;
@@ -157,10 +169,11 @@ function describeStep(step: StepRecord): string {
     case "send_payment": {
       const head = `${input.from} → ${input.to}, ${input.amount} ${input.asset ?? "CKB"}`;
       if (typeof result.error === "string") return `${head} — failed`;
+      if (result.timedOut === true) return `${head} — timed out`;
       return typeof result.status === "string" ? `${head} — ${result.status}` : head;
     }
     case "new_invoice":
-      return `${input.to} invoices ${input.amount} CKB`;
+      return `${input.to} invoices ${input.amount} ${input.asset ?? "CKB"}${input.hold === true ? ", held" : ""}`;
     case "wait":
       return `${input.durationSec}s`;
     case "kill_node":

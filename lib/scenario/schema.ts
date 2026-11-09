@@ -9,6 +9,7 @@ export const ErrorCategorySchema = z.enum([
   "no_route_found",
   "peer_offline",
   "invoice_expired",
+  "invoice_cancelled",
 ]);
 
 
@@ -47,9 +48,11 @@ export const BalanceCheckSchema = z
     remote: AmountMatcherSchema.optional(),
     localDelta: AmountMatcherSchema.optional(),
     remoteDelta: AmountMatcherSchema.optional(),
+    offered: AmountMatcherSchema.optional(),
+    received: AmountMatcherSchema.optional(),
   })
-  .refine((b) => hasAny(b, ["local", "remote", "localDelta", "remoteDelta"]), {
-    message: "a balance check needs local, remote, localDelta or remoteDelta",
+  .refine((b) => hasAny(b, ["local", "remote", "localDelta", "remoteDelta", "offered", "received"]), {
+    message: "a balance check needs local, remote, localDelta, remoteDelta, offered or received",
   });
 
 export const ChannelStateSchema = z.enum([
@@ -68,7 +71,16 @@ export const ChannelCheckSchema = z.strictObject({
   node: z.string().min(1),
   peer: z.string().min(1),
   state: ChannelStateSchema,
+  flags: z.string().min(1).optional(),
 });
+
+export const PeerCheckSchema = z.strictObject({
+  node: z.string().min(1),
+  peer: z.string().min(1),
+  connected: z.boolean(),
+});
+
+export const PaymentStateSchema = z.enum(["succeeded", "failed", "inflight", "timeout"]);
 
 export const InvoiceStatusSchema = z.enum(["Open", "Cancelled", "Expired", "Received", "Paid"]);
 
@@ -90,11 +102,13 @@ export const OnchainCheckSchema = z
 
 export const StepExpectationSchema = z
   .strictObject({
-    status: z.enum(["succeeded", "failed"]).optional(),
+    status: PaymentStateSchema.optional(),
     reason: ErrorCategorySchema.optional(),
     fee: AmountMatcherSchema.optional(),
+    error: z.string().min(1).optional(),
     balances: z.array(BalanceCheckSchema).min(1).optional(),
     channels: z.array(ChannelCheckSchema).min(1).optional(),
+    peers: z.array(PeerCheckSchema).min(1).optional(),
     invoices: z.array(InvoiceCheckSchema).min(1).optional(),
     onchain: z.array(OnchainCheckSchema).min(1).optional(),
   })
@@ -117,7 +131,27 @@ export const SeedActionSchema = z.enum([
   "mine",
   "advance_epochs",
   "assert",
+  "await_payment",
+  "settle_invoice",
+  "cancel_invoice",
+  "close_channel",
+  "disconnect_peer",
+  "connect_peer",
+  "pause_node",
+  "resume_node",
 ]);
+
+export const PAYMENT_ACTIONS: readonly string[] = ["send_payment", "await_payment"];
+export const REFUSABLE_ACTIONS: readonly string[] = ["settle_invoice", "cancel_invoice", "close_channel"];
+
+const FIELD_ACTIONS: Record<string, readonly string[]> = {
+  hold: ["new_invoice"],
+  finalExpiryDeltaSec: ["new_invoice"],
+  waitFor: ["send_payment"],
+  timeoutSec: PAYMENT_ACTIONS,
+  wrongPreimage: ["settle_invoice"],
+  force: ["close_channel"],
+};
 
 const usesDeltas = (exp: z.infer<typeof StepExpectationSchema>): boolean =>
   (exp.balances ?? []).some((b) => b.localDelta !== undefined || b.remoteDelta !== undefined) ||
@@ -136,6 +170,12 @@ export const SeedStepSchema = z
     useInvoice: z.boolean().optional(), // send_payment: pay `to`'s invoice (from an earlier new_invoice) instead of keysend
     blocks: z.number().int().positive().optional(), // mine
     epochs: z.number().int().positive().optional(), // advance_epochs
+    hold: z.boolean().optional(), // new_invoice: the payment waits, locked, for settle_invoice or cancel_invoice
+    finalExpiryDeltaSec: z.number().int().positive().optional(), // new_invoice
+    waitFor: z.enum(["final", "inflight"]).optional(), // send_payment
+    timeoutSec: z.number().positive().optional(), // send_payment, await_payment
+    wrongPreimage: z.boolean().optional(), // settle_invoice
+    force: z.boolean().optional(), // close_channel
     expect: StepExpectationSchema.optional(),
   })
   .superRefine((step, ctx) => {
@@ -163,7 +203,20 @@ export const SeedStepSchema = z
         break;
       case "kill_node":
       case "start_node":
+      case "pause_node":
+      case "resume_node":
+      case "settle_invoice":
+      case "cancel_invoice":
         require("node");
+        break;
+      case "await_payment":
+        require("from");
+        break;
+      case "close_channel":
+      case "disconnect_peer":
+      case "connect_peer":
+        require("from");
+        require("to");
         break;
       case "advance_epochs":
         require("epochs");
@@ -183,16 +236,48 @@ export const SeedStepSchema = z
       });
     }
 
-    if (step.expect !== undefined && step.action !== "send_payment") {
+    for (const [field, actions] of Object.entries(FIELD_ACTIONS)) {
+      if (step[field as keyof typeof step] !== undefined && !actions.includes(step.action)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [field],
+          message: `"${field}" only applies to ${actions.join(" and ")} (this step is "${step.action}")`,
+        });
+      }
+    }
+
+    if (step.expect !== undefined && !PAYMENT_ACTIONS.includes(step.action)) {
       for (const field of ["status", "reason", "fee"] as const) {
         if (step.expect[field] !== undefined) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             path: ["expect", field],
-            message: `expect.${field} describes a payment, so it only applies to send_payment (this step is "${step.action}")`,
+            message: `expect.${field} describes a payment, so it only applies to send_payment and await_payment (this step is "${step.action}")`,
           });
         }
       }
+    }
+    if (step.expect?.error !== undefined && !REFUSABLE_ACTIONS.includes(step.action)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["expect", "error"],
+        message: `expect.error only applies to ${REFUSABLE_ACTIONS.join(", ")} (this step is "${step.action}")`,
+      });
+    }
+    const leftInFlight = step.action === "send_payment" && step.waitFor === "inflight";
+    if (step.expect?.status === "inflight" && !leftInFlight) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["expect", "status"],
+        message: `expect.status "inflight" needs a send_payment with waitFor: inflight; any other step waits for the payment to finish`,
+      });
+    }
+    if (step.expect?.status === "timeout" && leftInFlight) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["expect", "status"],
+        message: `a payment left in flight on purpose cannot time out; drop waitFor: inflight or expect "inflight"`,
+      });
     }
     if (step.action === "assert" && step.expect !== undefined && usesDeltas(step.expect)) {
       ctx.addIssue({
@@ -277,7 +362,19 @@ export const ScenarioSchema = z
       });
       (exp.invoices ?? []).forEach((c, j) => checkNode(c.node, ["seed", i, "expect", "invoices", j, "node"]));
       (exp.onchain ?? []).forEach((c, j) => checkNode(c.node, ["seed", i, "expect", "onchain", j, "node"]));
+      (exp.peers ?? []).forEach((p, j) => {
+        checkNode(p.node, ["seed", i, "expect", "peers", j, "node"]);
+        checkNode(p.peer, ["seed", i, "expect", "peers", j, "peer"]);
+      });
     });
+
+    if (scenario.expect !== undefined && scenario.seed.some((s) => s.waitFor === "inflight")) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["expect"],
+        message: `a top-level expect describes finished payments, but this seed leaves one in flight — put expect on the steps instead`,
+      });
+    }
 
     const hasPayment = scenario.seed.some((s) => s.action === "send_payment");
     if (scenario.expect !== undefined && !hasPayment) {
@@ -307,6 +404,8 @@ export type BalanceCheck = z.infer<typeof BalanceCheckSchema>;
 export type ChannelCheck = z.infer<typeof ChannelCheckSchema>;
 export type InvoiceCheck = z.infer<typeof InvoiceCheckSchema>;
 export type InvoiceStatus = z.infer<typeof InvoiceStatusSchema>;
+export type PeerCheck = z.infer<typeof PeerCheckSchema>;
+export type PaymentState = z.infer<typeof PaymentStateSchema>;
 export type OnchainCheck = z.infer<typeof OnchainCheckSchema>;
 export type Scenario = z.infer<typeof ScenarioSchema>;
 /** A scenario as written by hand, before zod fills in its defaults. */
