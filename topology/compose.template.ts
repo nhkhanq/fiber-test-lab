@@ -78,10 +78,10 @@ function fnnHealthcheck(): Healthcheck {
   };
 }
 
-function hostUser(): string | undefined {
+function hostUser(): string | null {
   return typeof process.getuid === "function" && typeof process.getgid === "function"
     ? `${process.getuid()}:${process.getgid()}`
-    : undefined;
+    : null;
 }
 
 export function buildComposeProject(
@@ -89,7 +89,7 @@ export function buildComposeProject(
   runId: string,
   config: GlobalConfig,
   images: LabImages,
-  user: string | undefined = hostUser(),
+  user: string | null = hostUser(),
 ): ComposeProject {
   if (!runId) throw new Error("buildComposeProject: runId is empty");
 
@@ -110,7 +110,7 @@ export function buildComposeProject(
     services[node] = {
       container_name: containerName(config, runId, node),
       image: images.fnn,
-      ...(user === undefined ? {} : { user }),
+      ...(user === null ? {} : { user }),
       networks: [net],
       restart: "unless-stopped",
       depends_on: { [CKB_SERVICE]: { condition: "service_healthy" } },

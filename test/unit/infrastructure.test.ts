@@ -261,7 +261,7 @@ describe("images and compose", () => {
 
   it("runs FNN as the invoking user when told one, so its files stay removable", () => {
     expect(buildComposeProject(scenario(), "r", config, images, "1001:1001").services.alice?.user).toBe("1001:1001");
-    expect(buildComposeProject(scenario(), "r", config, images, undefined).services.alice?.user).toBeUndefined();
+    expect(buildComposeProject(scenario(), "r", config, images, null).services.alice?.user).toBeUndefined();
   });
 });
 
