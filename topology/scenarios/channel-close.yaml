@@ -1,0 +1,23 @@
+name: channel-close
+description: A channel is closed cooperatively and both sides get their balances back on-chain
+tags: [lifecycle, close]
+nodes: [alice, bob]
+channels:
+  - { from: alice, to: bob, capacity: 500 }
+seed:
+  - action: send_payment
+    from: alice
+    to: bob
+    amount: 100
+    expect:
+      status: succeeded
+  - action: close_channel
+    from: alice
+    to: bob
+    expect:
+      channels:
+        - { node: alice, peer: bob, state: Closed, flags: COOPERATIVE }
+        - { node: bob, peer: alice, state: Closed, flags: COOPERATIVE }
+      onchain:
+        - { node: alice, capacityDelta: { min: 399.99, max: 400 } }
+        - { node: bob, capacityDelta: 199 }

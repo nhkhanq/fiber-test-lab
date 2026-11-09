@@ -1,0 +1,74 @@
+name: restart-during-hold
+description: A held payment survives a restart of the receiver, and settles while the payer is down
+tags: [lifecycle, hold, connectivity]
+nodes: [member, hub, organizer]
+channels:
+  - { from: member, to: hub, capacity: 1000 }
+  - { from: hub, to: organizer, capacity: 1000 }
+seed:
+  - action: new_invoice
+    to: organizer
+    amount: 10
+    hold: true
+    finalExpiryDeltaSec: 86400
+  - action: send_payment
+    from: member
+    to: organizer
+    amount: 10
+    useInvoice: true
+    waitFor: inflight
+    expect:
+      status: inflight
+      invoices:
+        - { node: organizer, status: Received }
+  - action: kill_node
+    node: organizer
+  - action: start_node
+    node: organizer
+    expect:
+      invoices:
+        - { node: organizer, status: Received }
+      balances:
+        - { node: organizer, peer: hub, received: 10 }
+      peers:
+        - { node: organizer, peer: hub, connected: true }
+  - action: settle_invoice
+    node: organizer
+    expect:
+      invoices:
+        - { node: organizer, status: Paid }
+  - action: await_payment
+    from: member
+    expect:
+      status: succeeded
+  - action: new_invoice
+    to: organizer
+    amount: 7
+    hold: true
+    finalExpiryDeltaSec: 86400
+  - action: send_payment
+    from: member
+    to: organizer
+    amount: 7
+    useInvoice: true
+    waitFor: inflight
+    expect:
+      status: inflight
+      invoices:
+        - { node: organizer, status: Received }
+  - action: kill_node
+    node: member
+  - action: settle_invoice
+    node: organizer
+    expect:
+      invoices:
+        - { node: organizer, status: Paid }
+  - action: start_node
+    node: member
+  - action: await_payment
+    from: member
+    expect:
+      status: succeeded
+      balances:
+        - { node: member, peer: hub, offered: 0 }
+        - { node: organizer, peer: hub, local: 17, received: 0 }

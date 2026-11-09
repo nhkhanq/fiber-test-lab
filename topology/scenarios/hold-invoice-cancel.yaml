@@ -1,0 +1,38 @@
+name: hold-invoice-cancel
+description: A held payment is cancelled by the receiver and the payer gets the locked money back
+tags: [lifecycle, hold, failure]
+nodes: [member, hub, organizer]
+channels:
+  - { from: member, to: hub, capacity: 1000 }
+  - { from: hub, to: organizer, capacity: 1000 }
+seed:
+  - action: new_invoice
+    to: organizer
+    amount: 20
+    hold: true
+    finalExpiryDeltaSec: 86400
+  - action: send_payment
+    from: member
+    to: organizer
+    amount: 20
+    useInvoice: true
+    waitFor: inflight
+    expect:
+      status: inflight
+      invoices:
+        - { node: organizer, status: Received }
+      balances:
+        - { node: member, peer: hub, offered: 20.02 }
+  - action: cancel_invoice
+    node: organizer
+    expect:
+      invoices:
+        - { node: organizer, status: Cancelled }
+  - action: await_payment
+    from: member
+    expect:
+      status: failed
+      reason: invoice_cancelled
+      balances:
+        - { node: member, peer: hub, local: 901, offered: 0 }
+        - { node: organizer, peer: hub, local: 0, received: 0 }

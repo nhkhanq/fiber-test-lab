@@ -1,0 +1,51 @@
+name: hold-invoice-settle
+description: A held payment locks across two hops, the node refuses an early or wrong settle, then the true preimage pays it out
+tags: [lifecycle, hold]
+nodes: [member, hub, organizer]
+channels:
+  - { from: member, to: hub, capacity: 1000 }
+  - { from: hub, to: organizer, capacity: 1000 }
+seed:
+  - action: new_invoice
+    to: organizer
+    amount: 10
+    hold: true
+    finalExpiryDeltaSec: 86400
+    expect:
+      invoices:
+        - { node: organizer, status: Open }
+  - action: settle_invoice
+    node: organizer
+    expect:
+      error: still open
+  - action: send_payment
+    from: member
+    to: organizer
+    amount: 10
+    useInvoice: true
+    waitFor: inflight
+    expect:
+      status: inflight
+      invoices:
+        - { node: organizer, status: Received }
+      balances:
+        - { node: member, peer: hub, local: 901, offered: 10.01 }
+        - { node: organizer, peer: hub, local: 0, received: 10 }
+  - action: settle_invoice
+    node: organizer
+    wrongPreimage: true
+    expect:
+      error: hash mismatch
+  - action: settle_invoice
+    node: organizer
+    expect:
+      invoices:
+        - { node: organizer, status: Paid }
+  - action: await_payment
+    from: member
+    expect:
+      status: succeeded
+      fee: 0.01
+      balances:
+        - { node: member, peer: hub, local: 890.99, offered: 0 }
+        - { node: organizer, peer: hub, local: 10, received: 0 }

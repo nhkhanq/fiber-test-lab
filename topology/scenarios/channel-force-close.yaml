@@ -1,0 +1,26 @@
+name: channel-force-close
+description: One side force-closes a channel and both sides are paid out on-chain after the commitment delay
+tags: [lifecycle, close]
+nodes: [alice, bob]
+channels:
+  - { from: alice, to: bob, capacity: 500 }
+seed:
+  - action: send_payment
+    from: alice
+    to: bob
+    amount: 100
+    expect:
+      status: succeeded
+  - action: close_channel
+    from: alice
+    to: bob
+    force: true
+    expect:
+      channels:
+        - { node: alice, peer: bob, state: Closed, flags: UNCOOPERATIVE_LOCAL }
+  - action: advance_epochs
+    epochs: 8
+    expect:
+      onchain:
+        - { node: alice, capacityDelta: { min: 399.99, max: 400 } }
+        - { node: bob, capacityDelta: { min: 198.99, max: 199 } }

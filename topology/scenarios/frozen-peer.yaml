@@ -1,0 +1,24 @@
+name: frozen-peer
+description: A payment to a frozen peer stays undecided, reported as a timeout rather than a failure, and completes once the peer wakes
+tags: [lifecycle, connectivity]
+nodes: [alice, bob]
+channels:
+  - { from: alice, to: bob, capacity: 500 }
+seed:
+  - action: pause_node
+    node: bob
+  - action: send_payment
+    from: alice
+    to: bob
+    amount: 10
+    timeoutSec: 4
+    expect:
+      status: timeout
+  - action: resume_node
+    node: bob
+  - action: await_payment
+    from: alice
+    expect:
+      status: succeeded
+      balances:
+        - { node: alice, peer: bob, local: 391, remote: 10 }
