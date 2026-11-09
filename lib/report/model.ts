@@ -11,6 +11,7 @@ export interface ReportSummary {
   status: RunLog["status"];
   startedAt: string;
   finishedAt: string | null;
+  versions: { fnn: string; ckb: string } | null;
   /** startedAt -> finishedAt: the run's whole lifetime, which for a reset run includes the
    *  hours it sat idle before somebody cleaned it up. */
   durationMs: number | null;
@@ -111,14 +112,27 @@ function stepProgress(step: StepRecord): string | null {
   return null;
 }
 
+function failedAsExpected(step: StepRecord): boolean {
+  return (step.checks ?? []).some(
+    (c) => c.match && (c.check.endsWith(" error") || (c.check === "payment status" && c.expected === "failed")),
+  );
+}
+
 function stepOk(step: StepRecord): boolean {
   if (step.checks?.some((c) => !c.match)) return false;
+  if (failedAsExpected(step)) return true;
   const result = step.result as Record<string, unknown> | null;
   if (result === null || typeof result !== "object") return true;
   if ("error" in result) return false;
   if (result.status === "Failed") return false;
   if (result.match === false) return false;
   return true;
+}
+
+const plural = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? "" : "s"}`;
+
+function refusal(result: Record<string, unknown>): string {
+  return typeof result.error === "string" ? ` — refused: ${result.error.replace(/^RPC \w+ failed: /, "")}` : "";
 }
 
 function describeStep(step: StepRecord): string {
@@ -141,11 +155,12 @@ function describeStep(step: StepRecord): string {
       return typeof result.status === "string" ? `${input.from} — ${result.timedOut === true ? "timed out" : result.status}` : String(input.from ?? "");
     case "settle_invoice":
     case "cancel_invoice":
+      return `${input.node ?? ""}${refusal(result)}`;
     case "pause_node":
     case "resume_node":
       return String(input.node ?? "");
     case "close_channel":
-      return `${input.from} → ${input.to}${input.force === true ? ", forced" : ""}`;
+      return `${input.from} → ${input.to}${input.force === true ? ", forced" : ""}${refusal(result)}`;
     case "disconnect_peer":
     case "connect_peer":
       return `${input.from} → ${input.to}`;
@@ -158,13 +173,13 @@ function describeStep(step: StepRecord): string {
     case "docker_up": {
       const services = Array.isArray(input.services) ? input.services.length : 0;
       if (step.status === "running") return stepProgress(step) ?? `starting ${services} services`;
-      const images = typeof result.imagesBuilt === "number" && result.imagesBuilt > 0 ? `${result.imagesBuilt} images built, ` : "";
-      return `${images}${result.containersStarted ?? 0} containers started`;
+      const images = typeof result.imagesBuilt === "number" && result.imagesBuilt > 0 ? `${plural(result.imagesBuilt, "image")} built, ` : "";
+      return `${images}${plural(Number(result.containersStarted ?? 0), "container")} started`;
     }
     case "wait_ready": {
       const containers = Array.isArray(input.containers) ? input.containers.length : 0;
       if (step.status === "running") return stepProgress(step) ?? "waiting for health checks";
-      return typeof result.error === "string" ? "timed out" : `${containers} containers healthy`;
+      return typeof result.error === "string" ? "timed out" : `${plural(containers, "container")} healthy`;
     }
     case "open_channel":
       return `${input.from} → ${input.to}, ${input.capacity} ${input.asset ?? "CKB"}`;
@@ -234,7 +249,8 @@ function buildEdges(snapshots: ChannelSnapshot[]): ReportEdge[] {
       aBalance: primary.localBalance,
       bBalance: counterpart?.localBalance ?? primary.remoteBalance,
       asset: primary.asset,
-      state: counterpart?.state ?? primary.state,
+      // After a one-sided close the other node still says ChannelReady for a while.
+      state: [counterpart?.state, primary.state].find((s) => s !== undefined && s !== "ChannelReady") ?? primary.state,
       onPaymentPath: false,
     });
   }
@@ -283,19 +299,24 @@ function buildSummary(log: RunLog): ReportSummary {
   const lastStepAt = log.steps.at(-1)?.at ?? null;
   const expectStep = [...log.steps].reverse().find((s) => s.action === "expect");
   const expectResult = (expectStep?.result ?? null) as Record<string, unknown> | null;
+  // A scenario that only declares expectations on its steps has no overall status to name.
+  const stepChecks = typeof expectResult?.stepChecks === "number" ? expectResult.stepChecks : 0;
+  const failedChecks = Array.isArray(expectResult?.failedChecks) ? expectResult.failedChecks.length : 0;
+  const onlyStepChecks = typeof expectResult?.expected !== "string" && stepChecks > 0;
   return {
     runId: log.runId,
     scenario: log.scenario,
     status: log.status,
     startedAt: log.startedAt,
     finishedAt: log.finishedAt,
+    versions: log.versions ?? null,
     durationMs: log.finishedAt === null ? null : ms(log.startedAt, log.finishedAt),
     activeMs: lastStepAt === null ? null : ms(log.startedAt, lastStepAt),
     error: log.error,
     verdict:
       expectResult === null ? "unknown" : expectResult.match === true ? "match" : "mismatch",
-    expected: typeof expectResult?.expected === "string" ? expectResult.expected : null,
-    actual: typeof expectResult?.actual === "string" ? expectResult.actual : null,
+    expected: onlyStepChecks ? plural(stepChecks, "step check") : typeof expectResult?.expected === "string" ? expectResult.expected : null,
+    actual: onlyStepChecks ? `${stepChecks - failedChecks} passed` : typeof expectResult?.actual === "string" ? expectResult.actual : null,
   };
 }
 

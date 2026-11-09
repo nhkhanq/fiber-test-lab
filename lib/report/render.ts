@@ -58,6 +58,11 @@ const seriesVars = (nodes: ReportNode[], palette: string[]): string =>
 /* ── Topology ───────────────────────────────────────────────────────────────── */
 
 const NODE_RADIUS = 26;
+
+function nodeLabelSize(name: string): number {
+  const fit = ((NODE_RADIUS - 3) * 2) / (name.length * 0.62);
+  return Math.max(7, Math.min(13, Math.round(fit * 10) / 10));
+}
 const EDGE_WIDTH = 8;
 const GRAPH_PADDING = 90;
 const SPACING = 230;
@@ -148,10 +153,11 @@ const renderNodes = (nodes: ReportNode[], positions: Positions): string =>
   nodes
     .map((node) => {
       const p = positions.get(node.name)!;
+      const size = nodeLabelSize(node.name);
       return `
       <g class="node">
         <circle cx="${p.x}" cy="${p.y}" r="${NODE_RADIUS}" stroke="${nodeColor(node.name)}" />
-        <text x="${p.x}" y="${p.y + 5}" class="node-label">${escapeHtml(node.name)}</text>
+        <text x="${p.x}" y="${p.y + size * 0.38}" class="node-label" style="font-size:${size}px">${escapeHtml(node.name)}</text>
       </g>`;
     })
     .join("");
@@ -761,7 +767,9 @@ export function renderReport(model: ReportModel, options: RenderOptions = {}): s
       : `<p class="sub"><a href="${escapeHtml(options.backHref)}">← all runs</a></p>`
   }
   <h1>${escapeHtml(s.scenario)}</h1>
-  <p class="sub">run <code>${escapeHtml(s.runId)}</code> · started ${escapeHtml(s.startedAt)}</p>
+  <p class="sub">run <code>${escapeHtml(s.runId)}</code> · started ${escapeHtml(s.startedAt)}${
+    s.versions === null ? "" : ` · FNN ${escapeHtml(s.versions.fnn)} · CKB ${escapeHtml(s.versions.ckb)}`
+  }</p>
   ${renderTiles(model)}
   ${s.error === null ? "" : `<div class="error-box">${escapeHtml(s.error)}</div>`}
 
