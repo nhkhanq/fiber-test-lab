@@ -1,6 +1,6 @@
 {
   "name": "fiber-test-lab",
-  "version": "1.1.0",
+  "version": "0.9.1",
   "type": "module",
   "description": "Fully-local, one-command test environment for Fiber Network payment/routing scenarios (CLI + YAML scenarios + test-kit).",
   "keywords": [
@@ -54,6 +54,7 @@
   ],
   "scripts": {
     "prepare": "node scripts/build-types.mjs",
+    "prepublishOnly": "tsx scripts/release-check.ts",
     "lab": "tsx cli/index.ts",
     "ui": "tsx cli/index.ts ui --open",
     "typecheck": "tsc --noEmit",

@@ -58,7 +58,7 @@ Print what a client in any language needs to use a run, read from its run-log: e
 - **Exit code:** `1` bad arguments or no such run, `2` the action failed.
 
 ### `fiber-lab doctor [--json]`
-Check Node.js, the Docker daemon and Compose. Exit code `2` if any is missing.
+Check Node.js, the Docker daemon and Compose, and print the FNN version the project will run. Exit code `2` if any is missing.
 ### `fiber-lab images [--json]`
 Build or pull the images for the configured versions without starting anything. `--json` prints their names.
 

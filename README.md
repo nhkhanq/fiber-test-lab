@@ -179,8 +179,22 @@ through `tsx`, which is installed as a regular dependency.
 Install the package into any Node.js project:
 
 ```bash
-npm install fiber-test-lab
+npm install --save-dev fiber-test-lab
 ```
+
+The package is numbered after the Fiber release it runs, the same way as
+`@nervosnetwork/fiber-js`, so choose the release your project targets:
+
+| Command | Runs |
+|---|---|
+| `npm install --save-dev fiber-test-lab` | The current stable FNN release (tag `latest`) |
+| `npm install --save-dev fiber-test-lab@next` | The newest FNN release candidate (tag `next`) |
+| `npm install --save-dev fiber-test-lab@0.9.1` | FNN 0.9.1 |
+
+A fix to the lab alone takes the next patch number on the same line, so the patch number can run
+ahead of FNN's, and `^0.9.1` picks up those fixes without moving to FNN 0.10. `npx fiber-lab doctor`
+prints the FNN version a project will run. Versions 1.0.0 and 1.1.0 predate this numbering and are
+older than 0.9.1.
 
 This adds two things to the project:
 
@@ -279,6 +293,9 @@ version, results should be re-verified before being trusted.
 | `@ckb-ccc/core` and `@ckb-ccc/fiber` | 0.0.0-canary-20260330023358 |
 | CKB devnet image | nervos/ckb v0.207.0 |
 | Node.js | 20.6 or later |
+
+All 16 scenarios have also passed on FNN 0.10.0-rc1 and 0.10.0-rc2, and
+`fiber-test-lab@next` pins the newest of those release candidates.
 
 ## Quick start with the CLI
 
@@ -1088,7 +1105,7 @@ run-logs, HTML reports and JUnit file as an artifact:
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: nhkhanq/fiber-test-lab@canary
+- uses: nhkhanq/fiber-test-lab@v0.9.1
   with:
     scenarios: ./scenarios/checkout.yaml   # or all: "true", or tags: "smoke payment"
 ```

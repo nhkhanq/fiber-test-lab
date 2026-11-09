@@ -12,6 +12,14 @@ Danh mục scenario của Fiber Test Lab kèm **kết quả verify thật** và 
 | CKB (devnet) | **v0.207.0** (`nervos/ckb`) | khớp genesis offckb 0.4.7 |
 | Node.js | ≥ 20 | chạy trực tiếp bằng `tsx`, không build |
 
+### Các bản FNN đã verify
+
+| FNN | Package | Kết quả 16 scenario |
+|---|---|---|
+| 0.9.1 | `fiber-test-lab@0.9.1` (`latest`) | Đạt 16/16 trên máy local và CI |
+| 0.10.0-rc1 | không phát hành | Đạt 16/16 trên máy local và CI |
+| 0.10.0-rc2 | `fiber-test-lab@0.10.0-rc2` (`next`) | Đạt 16/16 trên máy local, 2026-11-09 |
+
 ## Global config (`fiber-lab.config.ts`)
 
 | Setting | Giá trị | Ý nghĩa |

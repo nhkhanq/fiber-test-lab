@@ -1,12 +1,21 @@
 # Changelog
 
-Versions follow [semver](https://semver.org/). Verification results only hold for the pinned FNN
-and `@ckb-ccc/fiber` versions recorded in [`docs/scenario-catalog.md`](docs/scenario-catalog.md).
+From 0.9.1 on, the package is numbered after the FNN release it pins, the way
+`@nervosnetwork/fiber-js` is; [`docs/releasing.md`](docs/releasing.md) has the rule. 1.0.0 and 1.1.0
+predate it. Verification results only hold for the pinned FNN and `@ckb-ccc/fiber` versions recorded
+in [`docs/scenario-catalog.md`](docs/scenario-catalog.md).
 
-## Unreleased
+## 0.9.1
+
+Pins FNN 0.9.1. The same code is released as `0.10.0-rc2`, under the `next` tag, pinned to FNN
+0.10.0-rc2.
 
 ### Added
 
+- **Releases follow Fiber.** Pushing a `v*` tag runs every check against the pinned FNN, then
+  publishes to npm: a stable version to `latest`, a release candidate to `next`. A version that does
+  not follow the pinned FNN is rejected by a unit test and before any `npm publish`.
+- `fiber-lab doctor` prints the FNN version the project will run.
 - **The lab drives the chain.** No miner runs by default; blocks are mined through `generate_block`
   only while something is waiting on-chain, so opening a channel takes about 3 s instead of 35 s and
   the chain stands still between steps. New seed actions `mine` and `advance_epochs`, and

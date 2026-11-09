@@ -73,3 +73,5 @@ tags: [scenario, polling, isolation, cleanup]
 **BR-DET-001:** The same scenario + the same FNN/offckb version must produce the same `expect` result. If it is flaky (passes sometimes, fails other times) -> treat it as a Test Lab bug (usually a missing wait for READY), not as acceptable behavior.
 
 **BR-DET-002:** The FNN binary version + `@ckb-ccc/fiber` version must be pinned. A verified result is only considered valid for the version recorded in `scenario-catalog.md`. The run-log records the versions each run used.
+
+**BR-DET-003:** The package is numbered after the FNN release it pins: the same `major.minor`, and for a release candidate the same suffix. A fix to the lab alone takes the next patch on a stable line and a `.N` suffix on a release candidate. A stable version is published to `latest` and a release candidate to `next`. Details: `docs/releasing.md`.

@@ -38,7 +38,7 @@ jobs:
         include:
           - fnn: "0.9.1"
             experimental: false
-          - fnn: "0.10.0-rc1"
+          - fnn: "0.10.0-rc2"
             experimental: true
     steps:
       - uses: actions/checkout@v4
@@ -88,7 +88,7 @@ jobs:
         include:
           - fnn: "0.9.1"
             experimental: false
-          - fnn: "0.10.0-rc1"
+          - fnn: "0.10.0-rc2"
             experimental: true
     steps:
       - uses: actions/checkout@v4
