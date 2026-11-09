@@ -32,6 +32,7 @@ and `@ckb-ccc/fiber` versions recorded in [`docs/scenario-catalog.md`](docs/scen
 - Step expectations gain `error` (a refusal the step must get), `peers`, TLC amounts in balance
   checks (`offered`, `received`) and `flags` on channel checks. New failure reason
   `invoice_cancelled`.
+- `fiber-lab images` builds or pulls the images ahead of time, and the GitHub Action caches them.
 - **Up to 5 nodes per scenario**, with a warning above 3; genesis now funds 6 accounts.
 - A Docker-free unit suite: `npm run test:unit`. `npm run test:integration` runs the rest.
 - `reset --images` deletes the images the lab has built.
