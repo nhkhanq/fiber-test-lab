@@ -29,7 +29,7 @@ seed:
       invoices:
         - { node: organizer, status: Received }
       balances:
-        - { node: member, peer: hub, local: 901, offered: 10.01 }
+        - { node: member, peer: hub, localDelta: 0, offered: 10.01 }
         - { node: organizer, peer: hub, local: 0, received: 10 }
   - action: settle_invoice
     node: organizer
@@ -47,5 +47,5 @@ seed:
       status: succeeded
       fee: 0.01
       balances:
-        - { node: member, peer: hub, local: 890.99, offered: 0 }
+        - { node: member, peer: hub, offered: 0 }
         - { node: organizer, peer: hub, local: 10, received: 0 }

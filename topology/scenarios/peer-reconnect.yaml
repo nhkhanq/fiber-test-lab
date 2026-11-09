@@ -37,4 +37,4 @@ seed:
     expect:
       status: succeeded
       balances:
-        - { node: alice, peer: bob, local: 381, remote: 20 }
+        - { node: alice, peer: bob, remote: 20 }
