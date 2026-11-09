@@ -56,6 +56,10 @@ export class FiberClient {
     }
   }
 
+  setEndpoint(node: string, endpoint: string): void {
+    this.#endpoints[node] = endpoint;
+    this.#sdks.delete(node);
+  }
 
   rawCall(node: string, method: string, params: unknown[] = []): Promise<unknown> {
     const endpoint = this.#endpoints[node];

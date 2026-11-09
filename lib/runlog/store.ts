@@ -23,6 +23,9 @@ export const ChannelSnapshotSchema = z.object({
   asset: z.string().default("CKB"),
   localBalance: z.string().nullable().default(null),
   remoteBalance: z.string().nullable().default(null),
+  offeredBalance: z.string().nullable().optional(),
+  receivedBalance: z.string().nullable().optional(),
+  stateFlags: z.string().nullable().optional(),
 });
 
 export const CheckResultSchema = z.object({
@@ -214,6 +217,12 @@ export class RunLogStore {
         this.#touch();
       },
     };
+  }
+
+  setNodeEndpoint(name: string, endpoint: string): void {
+    const node = this.#log.nodes.find((n) => n.name === name);
+    if (node !== undefined) node.endpoint = endpoint;
+    this.#touch();
   }
 
   checkLastStep(checks: StepCheck[]): void {

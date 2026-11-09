@@ -22,6 +22,8 @@ tags: [scenario, polling, isolation, cleanup]
 
 **BR-SCN-006:** Unknown keys in a scenario are a validation error, and amounts must be exact in base units. `expect.reason` accepts only the categories a classifier can produce.
 
+**BR-SCN-007:** A `settle_invoice`, `cancel_invoice` or `close_channel` the node refuses fails the scenario unless the step declares `expect.error`, and one the node accepts fails if the step declared it.
+
 ## Chain Rules
 
 **BR-CHN-001:** In the default `manual` mode no miner runs: the chain advances only when the lab mines. Anything that waits on-chain must mine while it waits (`mineUntil`), and the chain stands still between steps.
@@ -29,6 +31,8 @@ tags: [scenario, polling, isolation, cleanup]
 **BR-CHN-002:** After mining and before anything that selects cells (a funding transaction, a mint), wait for the indexer to reach the tip. Blocks arrive faster than the indexer polls.
 
 **BR-CHN-003:** Hashes that depend on the genesis (UDT cell dep, secp256k1 dep group) are read from block 0 of the running chain, never kept as constants. The chain therefore starts before the FNN nodes, whose config needs them.
+
+**BR-CHN-004:** A state check that depends on the chain (`onchain`, a channel expected `Closed` or `ShuttingDown`) mines while it polls. In manual mode nothing else would move the chain, so it could only ever time out.
 
 ## Topology / Isolation Rules
 
@@ -40,6 +44,8 @@ tags: [scenario, polling, isolation, cleanup]
 
 **BR-ISO-004:** Two parallel runs must NOT share a network/container. If a name collision is detected -> generate a new run-id, never overwrite the existing run.
 
+**BR-ISO-005:** A restarted container gets a new host port. Every endpoint (clients, `ctx.endpoints`, the run-log) must follow it.
+
 ## Readiness / Polling Rules
 
 **BR-POL-001:** After `docker compose up`, wait for every node to be READY (poll `get_node_info` successfully) before seeding. Default timeout: `pollTimeoutMs`.
@@ -49,6 +55,8 @@ tags: [scenario, polling, isolation, cleanup]
 **BR-POL-003:** test-kit assertions (`expectPaymentSucceeds`...) and step state checks poll on `pollIntervalMs` until the result is reached or `pollTimeoutMs` elapses. Timing out without reaching the result -> fail the test with the run-log attached.
 
 **BR-POL-004:** Every RPC call must be recorded to the run-log (method/params/response/error) — even on success — so it can be debugged after a reset.
+
+**BR-POL-005:** A wait for a payment that runs out of time reports `timeout`, with the last status seen. It is not a failure and must never be reported as one: the payment may still settle.
 
 ## Cleanup Rules
 

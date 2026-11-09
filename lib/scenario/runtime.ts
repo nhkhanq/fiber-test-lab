@@ -1,8 +1,9 @@
 import { randomBytes } from "node:crypto";
+import { ccc } from "@ckb-ccc/core";
 import type { CkbChain, GenesisFacts, LockScript } from "../ckb/chain";
 import type { GlobalConfig } from "../config";
 import { DEV_FUNDED_KEYS, UDT_ASSET } from "../constants";
-import { killNode, startNode } from "../docker/orchestrator";
+import { killNode, pauseNode, resumeNode, startNode } from "../docker/orchestrator";
 import { toBaseUnits, toHex } from "../fiber/amounts";
 import type { FiberClient } from "../fiber/client";
 import { mintUdt, type UdtScript } from "../fiber/udt";
@@ -14,14 +15,30 @@ import {
   evaluateInvoices,
   evaluateOnchain,
   evaluatePayment,
+  evaluatePeers,
+  evaluateRefusal,
   needsBeforeState,
+  paymentState,
   type CheckResult,
   type PaymentResult,
 } from "./assertions";
 import { classifyFailure } from "./errorCategory";
-import type { Asset, ErrorCategory, InvoiceStatus, Scenario, SeedStep, StepExpectation } from "./schema";
+import {
+  PAYMENT_ACTIONS,
+  REFUSABLE_ACTIONS,
+  type Asset,
+  type ErrorCategory,
+  type InvoiceStatus,
+  type PaymentState,
+  type Scenario,
+  type SeedStep,
+  type StepExpectation,
+} from "./schema";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+const CLOSE_FEE_RATE = "0x3FC"; // shannons per KW, the rate FNN's own e2e suite closes with
+const WRONG_PREIMAGE = `0x${"11".repeat(32)}`;
 
 export interface ChannelRequest {
   from: string;
@@ -34,6 +51,19 @@ export interface OpenedChannel {
   channelId: string;
 }
 
+export interface CloseRequest {
+  from: string;
+  to: string;
+  force?: boolean;
+}
+
+export interface ClosedChannel {
+  ok: boolean;
+  error: string | null;
+  channelId: string | null;
+  flags: string | null;
+}
+
 export interface PaymentRequest {
   from: string;
   to: string;
@@ -43,10 +73,17 @@ export interface PaymentRequest {
   invoice?: string;
   /** Extra `send_payment` params, passed through as-is (e.g. max_fee_amount). */
   params?: Record<string, unknown>;
+  /** "inflight" returns as soon as the payment is on its way, for a payment that is meant to wait. */
+  waitFor?: "final" | "inflight";
+  timeoutMs?: number;
 }
 
 export interface PaymentOutcome {
+  from: string;
+  to: string;
   paymentHash: string | null;
+  /** succeeded, failed, inflight (left waiting on purpose) or timeout (stopped watching; not a failure). */
+  state: PaymentState;
   succeeded: boolean;
   /** Raw FNN status; null when the payment was rejected before it got a hash. */
   status: string | null;
@@ -61,6 +98,13 @@ export interface InvoiceRequest {
   amount: number;
   asset?: Asset;
   expiresInSec?: number;
+  /** The payment waits, locked, until settle_invoice or cancel_invoice. */
+  hold?: boolean;
+  /** Hold against this hash, for a flow where the payer created the secret. Implies hold. */
+  paymentHash?: string;
+  finalExpiryDeltaSec?: number;
+  /** Extra `new_invoice` params, passed through as-is. */
+  params?: Record<string, unknown>;
 }
 
 export interface CreatedInvoice {
@@ -69,6 +113,14 @@ export interface CreatedInvoice {
   paymentHash: string;
   amount: number;
   asset: Asset;
+  hold: boolean;
+  /** Null when the invoice was held against a hash the lab did not create. */
+  preimage: string | null;
+}
+
+export interface InvoiceActionResult {
+  ok: boolean;
+  error: string | null;
 }
 
 interface ResolvedNode {
@@ -81,9 +133,11 @@ interface RawChannel {
   channel_id: string;
   pubkey?: string;
   peer_id?: string;
-  state: { state_name: string };
+  state: { state_name: string; state_flags?: unknown };
   local_balance?: string;
   remote_balance?: string;
+  offered_tlc_balance?: string;
+  received_tlc_balance?: string;
   funding_udt_type_script?: unknown;
 }
 
@@ -91,6 +145,15 @@ interface StatePoint {
   channels: ChannelSnapshot[];
   onchain: Record<string, bigint>;
 }
+
+interface TrackedPayment {
+  hash: string;
+  to: string;
+  asset: Asset;
+}
+
+/** What a performed step produced. `error` marks a refusal the scenario can assert on. */
+type StepResult = (PaymentResult & { error?: unknown }) | null;
 
 export interface RuntimeDeps {
   scenario: Scenario;
@@ -128,6 +191,9 @@ export class ScenarioRuntime {
   readonly #channels: { from: string; to: string }[];
   readonly #udtByNode = new Map<string, UdtScript>();
   readonly #lastInvoice = new Map<string, CreatedInvoice>();
+  readonly #lastPayment = new Map<string, TrackedPayment>();
+  /** Killed or paused on purpose. Querying a paused node would hang until the RPC timeout. */
+  readonly #offline = new Set<string>();
 
   constructor(deps: RuntimeDeps) {
     this.#scenario = deps.scenario;
@@ -170,6 +236,10 @@ export class ScenarioRuntime {
     return node;
   }
 
+  #container(node: string): string {
+    return containerName(this.#config, this.#runId, node);
+  }
+
   get #probeOptions() {
     return { timeoutMs: this.#config.pollTimeoutMs, probeIntervalMs: this.#config.pollIntervalMs };
   }
@@ -190,8 +260,9 @@ export class ScenarioRuntime {
     return res.peers.some((p) => p.pubkey?.toLowerCase() === want);
   }
 
-  async #listChannels(node: string): Promise<RawChannel[]> {
-    const res = (await this.#client.rawCall(node, "list_channels", [{}])) as { channels: RawChannel[] };
+  async #listChannels(node: string, includeClosed = false): Promise<RawChannel[]> {
+    const params = includeClosed ? { include_closed: true } : {};
+    const res = (await this.#client.rawCall(node, "list_channels", [params])) as { channels: RawChannel[] };
     return res.channels;
   }
 
@@ -200,21 +271,25 @@ export class ScenarioRuntime {
     return channels.filter((c) => (c.pubkey ?? c.peer_id)?.toLowerCase() === want);
   }
 
-  /** Every node's view of its channels. Never throws: a node may be down on purpose. */
+  /** Every node's view of its channels, closed ones included. Never throws: a node may be down on purpose. */
   async channelSnapshots(): Promise<ChannelSnapshot[]> {
     const nameByPubkey = new Map(Object.entries(this.#nodes).map(([name, r]) => [r.pubkey.toLowerCase(), name]));
     const snapshots: ChannelSnapshot[] = [];
     for (const node of Object.keys(this.#nodes)) {
-      const channels = await this.#listChannels(node).catch(() => [] as RawChannel[]);
+      if (this.#offline.has(node)) continue;
+      const channels = await this.#listChannels(node, true).catch(() => [] as RawChannel[]);
       for (const ch of channels) {
         snapshots.push({
           node,
           peer: nameByPubkey.get((ch.pubkey ?? ch.peer_id ?? "").toLowerCase()) ?? null,
           channelId: ch.channel_id,
           state: ch.state.state_name,
+          stateFlags: ch.state.state_flags === undefined ? null : String(ch.state.state_flags),
           asset: ch.funding_udt_type_script ? UDT_ASSET : "CKB",
           localBalance: hexToDecimal(ch.local_balance),
           remoteBalance: hexToDecimal(ch.remote_balance),
+          offeredBalance: hexToDecimal(ch.offered_tlc_balance),
+          receivedBalance: hexToDecimal(ch.received_tlc_balance),
         });
       }
     }
@@ -315,6 +390,58 @@ export class ScenarioRuntime {
     return opened;
   }
 
+  #forgetChannel(a: string, b: string): void {
+    const index = this.#channels.findIndex((c) => (c.from === a && c.to === b) || (c.from === b && c.to === a));
+    if (index !== -1) this.#channels.splice(index, 1);
+  }
+
+  async #closedFlags(node: string, channelId: string): Promise<string | null> {
+    const channel = (await this.#listChannels(node, true)).find((c) => c.channel_id === channelId);
+    return channel?.state.state_name === "Closed" ? String(channel.state.state_flags ?? "") : null;
+  }
+
+  async #close(request: CloseRequest): Promise<{ handle: StepHandle; result: ClosedChannel }> {
+    const { from, to, force = false } = request;
+    const handle = this.#store.beginStep("close_channel", { from, to, force });
+    try {
+      const channel = this.#channelsWithPeer(await this.#listChannels(from), to).find(
+        (c) => c.state.state_name !== "Closed",
+      );
+      if (channel === undefined) throw new Error(`${from} has no open channel with ${to}`);
+      const channelId = channel.channel_id;
+
+      await this.#client.rawCall(from, "shutdown_channel", [
+        force
+          ? { channel_id: channelId, force: true }
+          : { channel_id: channelId, close_script: this.#node(from).lock, fee_rate: CLOSE_FEE_RATE },
+      ]);
+      handle.update({ stage: "waiting for the close to confirm", channelId });
+
+      // A force-close is one-sided: the peer only learns of it from the chain, later.
+      const flags = await this.#chain.mineUntil(
+        async () => {
+          const initiator = await this.#closedFlags(from, channelId);
+          if (initiator === null) return null;
+          if (!force && (await this.#closedFlags(to, channelId)) === null) return null;
+          return initiator;
+        },
+        { label: `the ${from}->${to} channel to close`, ...this.#probeOptions },
+      );
+      this.#forgetChannel(from, to);
+
+      handle.end({ channelId, flags }, await this.channelSnapshots());
+      return { handle, result: { ok: true, error: null, channelId, flags } };
+    } catch (error) {
+      const message = messageOf(error);
+      handle.end({ error: message }, await this.channelSnapshots());
+      return { handle, result: { ok: false, error: message, channelId: null, flags: null } };
+    }
+  }
+
+  async closeChannel(request: CloseRequest): Promise<ClosedChannel> {
+    return (await this.#close(request)).result;
+  }
+
   #neighbours(node: string): string[] {
     return this.#channels.flatMap((c) => (c.from === node ? [c.to] : c.to === node ? [c.from] : []));
   }
@@ -347,11 +474,28 @@ export class ScenarioRuntime {
     }
   }
 
-  async #waitPayment(node: string, paymentHash: string): Promise<PaymentResult> {
-    return this.#poll(async () => {
-      const payment = (await this.#client.rawCall(node, "get_payment", [{ payment_hash: paymentHash }])) as PaymentResult;
-      return payment.status === "Success" || payment.status === "Failed" ? payment : null;
-    }, `payment ${paymentHash.slice(0, 12)}… to finish`);
+  /** Watch a payment. Running out of time is an answer of its own: the payment may still settle,
+   *  so it comes back marked timedOut with the last status seen, never as a failure. An RPC error
+   *  is not an answer either: the payer may be down and come back. */
+  async #watchPayment(
+    node: string,
+    paymentHash: string,
+    until: "final" | "inflight",
+    timeoutMs: number,
+  ): Promise<PaymentResult> {
+    const deadline = Date.now() + timeoutMs;
+    let last: PaymentResult = { payment_hash: paymentHash };
+    while (true) {
+      try {
+        last = (await this.#client.rawCall(node, "get_payment", [{ payment_hash: paymentHash }])) as PaymentResult;
+        if (last.status === "Success" || last.status === "Failed") return last;
+        if (until === "inflight" && last.status === "Inflight") return last;
+      } catch {
+        // Keep watching until the deadline.
+      }
+      if (Date.now() > deadline) return { ...last, payment_hash: paymentHash, timedOut: true };
+      await sleep(this.#config.pollIntervalMs);
+    }
   }
 
   /** Whether the payer can still reach the network: its channel to the target if it has one,
@@ -364,15 +508,23 @@ export class ScenarioRuntime {
     return states.some(Boolean);
   }
 
+  async #endPaymentStep(from: string, to: string, watched: PaymentResult, record: StepHandle): Promise<PaymentResult> {
+    const result: PaymentResult =
+      watched.status === "Failed" ? { ...watched, peerConnected: await this.#peerConnected(from, to) } : watched;
+    record.end(result, await this.channelSnapshots());
+    return result;
+  }
+
   async #sendPayment(request: PaymentRequest, record: StepHandle): Promise<PaymentResult> {
     const asset = request.asset ?? "CKB";
     const { from, to, amount } = request;
+    let paymentHash: string;
     try {
+      await this.#waitForGraph(from);
       let params: Record<string, unknown>;
       if (request.invoice !== undefined) {
         params = { invoice: request.invoice };
       } else {
-        await this.#waitForGraph(from);
         params = { target_pubkey: this.#node(to).pubkey, amount: toHex(toBaseUnits(amount, asset)), keysend: true };
         if (asset === UDT_ASSET) params.udt_type_script = this.#udtScript(from);
       }
@@ -380,17 +532,22 @@ export class ScenarioRuntime {
       const res = (await this.#client.rawCall(from, "send_payment", [{ ...params, ...request.params }])) as {
         payment_hash: string;
       };
-      record.update({ payment_hash: res.payment_hash, status: "Inflight" });
-      const final = await this.#waitPayment(from, res.payment_hash);
-      const result: PaymentResult =
-        final.status === "Failed" ? { ...final, peerConnected: await this.#peerConnected(from, to) } : final;
-      record.end(result, await this.channelSnapshots());
-      return result;
+      paymentHash = res.payment_hash;
     } catch (error) {
       const result: PaymentResult = { error: messageOf(error), peerConnected: await this.#peerConnected(from, to) };
       record.end(result, await this.channelSnapshots());
       return result;
     }
+
+    record.update({ payment_hash: paymentHash, status: "Inflight" });
+    this.#lastPayment.set(from, { hash: paymentHash, to, asset });
+    const watched = await this.#watchPayment(
+      from,
+      paymentHash,
+      request.waitFor ?? "final",
+      request.timeoutMs ?? this.#config.pollTimeoutMs,
+    );
+    return this.#endPaymentStep(from, to, watched, record);
   }
 
   #beginPayment(request: PaymentRequest): StepHandle {
@@ -398,35 +555,69 @@ export class ScenarioRuntime {
     return this.#store.beginStep("send_payment", { from, to, amount, asset: request.asset ?? "CKB" });
   }
 
-  async pay(request: PaymentRequest): Promise<PaymentOutcome> {
-    const result = await this.#sendPayment(request, this.#beginPayment(request));
-    const raw = result as PaymentResult & { payment_hash?: string };
+  #outcome(from: string, to: string, result: PaymentResult): PaymentOutcome {
+    const state = paymentState(result);
     return {
-      paymentHash: raw.payment_hash ?? null,
-      succeeded: raw.status === "Success",
-      status: raw.status ?? null,
-      fee: typeof raw.fee === "string" ? BigInt(raw.fee) : null,
-      error: raw.error === undefined ? ((raw.failed_error as string | null | undefined) ?? null) : String(raw.error),
-      reason: raw.status === "Success" ? null : classifyFailure(raw),
+      from,
+      to,
+      paymentHash: result.payment_hash ?? null,
+      state,
+      succeeded: state === "succeeded",
+      status: result.status ?? null,
+      fee: typeof result.fee === "string" ? BigInt(result.fee) : null,
+      error: result.error === undefined ? ((result.failed_error as string | null | undefined) ?? null) : String(result.error),
+      reason: state === "failed" ? classifyFailure(result) : null,
       result,
     };
   }
 
+  async pay(request: PaymentRequest): Promise<PaymentOutcome> {
+    return this.#outcome(request.from, request.to, await this.#sendPayment(request, this.#beginPayment(request)));
+  }
+
+  async #awaitTracked(from: string, tracked: TrackedPayment | undefined, timeoutMs?: number): Promise<{ handle: StepHandle; result: PaymentResult }> {
+    const handle = this.#store.beginStep("await_payment", { from, payment_hash: tracked?.hash ?? null });
+    if (tracked === undefined) {
+      const result: PaymentResult = { error: `await_payment: "${from}" has sent no payment` };
+      handle.end(result, await this.channelSnapshots());
+      return { handle, result };
+    }
+    const watched = await this.#watchPayment(from, tracked.hash, "final", timeoutMs ?? this.#config.pollTimeoutMs);
+    return { handle, result: await this.#endPaymentStep(from, tracked.to, watched, handle) };
+  }
+
+  /** Wait for a payment left in flight, or one whose earlier wait timed out, to finish. */
+  async awaitPayment(outcome: PaymentOutcome, options: { timeoutMs?: number } = {}): Promise<PaymentOutcome> {
+    const target =
+      outcome.paymentHash === null ? undefined : { hash: outcome.paymentHash, to: outcome.to, asset: "CKB" as const };
+    const { result } = await this.#awaitTracked(outcome.from, target, options.timeoutMs);
+    return this.#outcome(outcome.from, outcome.to, result);
+  }
+
   async newInvoice(request: InvoiceRequest): Promise<CreatedInvoice> {
     const asset = request.asset ?? "CKB";
-    const { to, amount, expiresInSec } = request;
-    const step = this.#store.beginStep("new_invoice", { to, amount, asset });
+    const { to, amount, expiresInSec, finalExpiryDeltaSec, paymentHash } = request;
+    const hold = request.hold === true || paymentHash !== undefined;
+    const step = this.#store.beginStep("new_invoice", { to, amount, asset, hold });
     try {
+      const preimage = paymentHash === undefined ? `0x${randomBytes(32).toString("hex")}` : null;
       const params: Record<string, unknown> = {
         amount: toHex(toBaseUnits(amount, asset)),
         currency: "Fibd",
-        payment_preimage: `0x${randomBytes(32).toString("hex")}`,
         description: `${this.#scenario.name}:${to}`,
       };
+      if (hold) {
+        // A hold invoice is created from the hash alone: FNN must not know the preimage yet.
+        params.payment_hash = paymentHash ?? ccc.hashCkb(preimage!);
+        params.hash_algorithm = "ckb_hash";
+      } else {
+        params.payment_preimage = preimage;
+      }
       if (expiresInSec !== undefined) params.expiry = `0x${expiresInSec.toString(16)}`;
+      if (finalExpiryDeltaSec !== undefined) params.final_expiry_delta = toHex(BigInt(finalExpiryDeltaSec) * 1000n);
       if (asset === UDT_ASSET) params.udt_type_script = this.#udtScript(to);
 
-      const res = (await this.#client.rawCall(to, "new_invoice", [params])) as {
+      const res = (await this.#client.rawCall(to, "new_invoice", [{ ...params, ...request.params }])) as {
         invoice_address: string;
         invoice: { data: { payment_hash: string } };
       };
@@ -436,6 +627,8 @@ export class ScenarioRuntime {
         paymentHash: res.invoice.data.payment_hash,
         amount,
         asset,
+        hold,
+        preimage,
       };
       this.#lastInvoice.set(to, invoice);
       step.end(res);
@@ -444,6 +637,48 @@ export class ScenarioRuntime {
       step.end({ error: messageOf(error) });
       throw error;
     }
+  }
+
+  async #invoiceAction(
+    action: "settle_invoice" | "cancel_invoice",
+    node: string,
+    invoice: CreatedInvoice | undefined,
+    call: (invoice: CreatedInvoice) => Promise<unknown>,
+  ): Promise<{ handle: StepHandle; result: InvoiceActionResult }> {
+    const handle = this.#store.beginStep(action, { node, payment_hash: invoice?.paymentHash ?? null });
+    try {
+      if (invoice === undefined) throw new Error(`${action}: "${node}" has created no invoice`);
+      await call(invoice);
+      handle.end({ ok: true }, await this.channelSnapshots());
+      return { handle, result: { ok: true, error: null } };
+    } catch (error) {
+      const message = messageOf(error);
+      handle.end({ error: message }, await this.channelSnapshots());
+      return { handle, result: { ok: false, error: message } };
+    }
+  }
+
+  #settle(node: string, invoice: CreatedInvoice | undefined, preimage?: string) {
+    return this.#invoiceAction("settle_invoice", node, invoice, async (target) => {
+      const secret = preimage ?? target.preimage;
+      if (secret === null) throw new Error("settle_invoice: this invoice's preimage is not known to the lab");
+      await this.#client.rawCall(node, "settle_invoice", [{ payment_hash: target.paymentHash, payment_preimage: secret }]);
+    });
+  }
+
+  #cancel(node: string, invoice: CreatedInvoice | undefined) {
+    return this.#invoiceAction("cancel_invoice", node, invoice, (target) =>
+      this.#client.rawCall(node, "cancel_invoice", [{ payment_hash: target.paymentHash }]),
+    );
+  }
+
+  /** A refused settle resolves with `{ ok: false, error }`, so a test can assert on the refusal. */
+  async settleInvoice(invoice: CreatedInvoice, options: { preimage?: string } = {}): Promise<InvoiceActionResult> {
+    return (await this.#settle(invoice.node, invoice, options.preimage)).result;
+  }
+
+  async cancelInvoice(invoice: CreatedInvoice): Promise<InvoiceActionResult> {
+    return (await this.#cancel(invoice.node, invoice)).result;
   }
 
   async invoiceStatus(node: string, paymentHash: string): Promise<InvoiceStatus> {
@@ -475,16 +710,84 @@ export class ScenarioRuntime {
 
   async killNode(node: string): Promise<void> {
     const step = this.#store.beginStep("kill_node", { node });
-    const container = containerName(this.#config, this.#runId, node);
+    const container = this.#container(node);
     await killNode(container);
+    this.#offline.add(node);
     step.end({ container });
   }
 
   async startNode(node: string): Promise<void> {
     const step = this.#store.beginStep("start_node", { node });
-    const container = containerName(this.#config, this.#runId, node);
-    await startNode(container, this.#config);
-    step.end({ container, ready: true });
+    const container = this.#container(node);
+    const endpoint = await startNode(container, this.#config);
+    if (endpoint !== null) {
+      this.#client.setEndpoint(node, endpoint);
+      this.#store.setNodeEndpoint(node, endpoint);
+    }
+    this.#offline.delete(node);
+    await this.#waitForReconnect(node);
+    step.end({ container, ready: true, endpoint });
+  }
+
+  /** A restarted node redials its peers by itself; a payment sent before that would fail for a
+   *  reason no test intended. Soft, so a peer that is also down does not fail the restart. */
+  async #waitForReconnect(node: string): Promise<void> {
+    const peers = this.#neighbours(node).filter((peer) => !this.#offline.has(peer));
+    const deadline = Date.now() + this.#config.pollTimeoutMs;
+    while (Date.now() < deadline) {
+      const states = await Promise.all(peers.map((peer) => this.#isConnected(node, peer).catch(() => false)));
+      if (states.every(Boolean)) return;
+      // FNN redials on a backoff of up to a minute, which made a restart take anywhere from 5 to 66 s.
+      const missing = peers.filter((_, i) => !states[i]);
+      await Promise.all(
+        missing.map((peer) =>
+          this.#client.rawCall(node, "connect_peer", [{ address: this.#node(peer).address }]).catch(() => null),
+        ),
+      );
+      await sleep(this.#config.pollIntervalMs);
+    }
+  }
+
+  /** Freeze a node with `docker pause`: it keeps its connections and answers nothing, the state
+   *  that leaves an ordinary payment genuinely undecided. */
+  async pauseNode(node: string): Promise<void> {
+    const step = this.#store.beginStep("pause_node", { node });
+    const container = this.#container(node);
+    await pauseNode(container);
+    this.#offline.add(node);
+    step.end({ container });
+  }
+
+  async resumeNode(node: string): Promise<void> {
+    const step = this.#store.beginStep("resume_node", { node });
+    const container = this.#container(node);
+    await resumeNode(container);
+    this.#offline.delete(node);
+    step.end({ container });
+  }
+
+  async disconnectPeer(from: string, to: string): Promise<void> {
+    const step = this.#store.beginStep("disconnect_peer", { from, to });
+    try {
+      await this.#client.rawCall(from, "disconnect_peer", [{ pubkey: this.#node(to).pubkey }]);
+      await this.#poll(async () => ((await this.#isConnected(from, to)) ? null : true), `${from} to drop ${to}`);
+      step.end({ connected: false });
+    } catch (error) {
+      step.end({ error: messageOf(error) });
+      throw error;
+    }
+  }
+
+  async connectPeer(from: string, to: string): Promise<void> {
+    const step = this.#store.beginStep("connect_peer", { from, to });
+    try {
+      await this.#client.rawCall(from, "connect_peer", [{ address: this.#node(to).address }]);
+      await this.#poll(async () => ((await this.#isConnected(from, to)) ? true : null), `${from} to connect to ${to}`);
+      step.end({ connected: true });
+    } catch (error) {
+      step.end({ error: messageOf(error) });
+      throw error;
+    }
   }
 
   async #statePoint(expect: StepExpectation): Promise<StatePoint> {
@@ -498,14 +801,25 @@ export class ScenarioRuntime {
     const statuses: Record<string, InvoiceStatus | null> = {};
     for (const { node } of expect.invoices ?? []) {
       const invoice = this.#lastInvoice.get(node);
-      statuses[node] = invoice === undefined ? null : await this.invoiceStatus(node, invoice.paymentHash);
+      statuses[node] = invoice === undefined ? null : await this.invoiceStatus(node, invoice.paymentHash).catch(() => null);
     }
     return statuses;
   }
 
+  async #peerStates(expect: StepExpectation): Promise<Record<string, boolean | null>> {
+    const states: Record<string, boolean | null> = {};
+    for (const { node, peer } of expect.peers ?? []) {
+      states[`${node}->${peer}`] = this.#offline.has(node) ? null : await this.#isConnected(node, peer).catch(() => null);
+    }
+    return states;
+  }
+
   /** Evaluate the state part of an expectation, polling until it holds or the timeout runs out:
-   *  balances settle a moment after a payment reports Success (BR-POL-003). */
+   *  balances settle a moment after a payment reports Success (BR-POL-003). A check that depends
+   *  on the chain has to keep the chain moving while it waits (BR-CHN-001). */
   async checkState(expect: StepExpectation, before: StatePoint | null = null): Promise<CheckResult[]> {
+    const needsBlocks =
+      expect.onchain !== undefined || (expect.channels ?? []).some((c) => c.state === "Closed" || c.state === "ShuttingDown");
     const deadline = Date.now() + this.#config.pollTimeoutMs;
     while (true) {
       const now = await this.#statePoint(expect);
@@ -514,16 +828,26 @@ export class ScenarioRuntime {
         ...evaluateChannels(expect.channels ?? [], now.channels),
         ...evaluateInvoices(expect.invoices ?? [], await this.#invoiceStatuses(expect)),
         ...evaluateOnchain(expect.onchain ?? [], now.onchain, before?.onchain ?? null),
+        ...evaluatePeers(expect.peers ?? [], await this.#peerStates(expect)),
       ];
       if (results.every((r) => r.match) || Date.now() > deadline) return results;
+      if (needsBlocks) await this.#chain.mine(1);
       await sleep(this.#config.pollIntervalMs);
     }
   }
 
-  async #perform(step: SeedStep): Promise<{ handle?: StepHandle; result: PaymentResult | null }> {
+  async #perform(step: SeedStep): Promise<{ handle?: StepHandle; result: StepResult }> {
+    const timeoutMs = step.timeoutSec === undefined ? undefined : step.timeoutSec * 1000;
     switch (step.action) {
       case "send_payment": {
-        const request: PaymentRequest = { from: step.from!, to: step.to!, amount: step.amount!, asset: step.asset };
+        const request: PaymentRequest = {
+          from: step.from!,
+          to: step.to!,
+          amount: step.amount!,
+          asset: step.asset,
+          waitFor: step.waitFor,
+          timeoutMs,
+        };
         const handle = this.#beginPayment(request);
         if (step.useInvoice) {
           const invoice = this.#lastInvoice.get(step.to!);
@@ -536,8 +860,39 @@ export class ScenarioRuntime {
         }
         return { handle, result: await this.#sendPayment(request, handle) };
       }
+      case "await_payment":
+        return this.#awaitTracked(step.from!, this.#lastPayment.get(step.from!), timeoutMs);
       case "new_invoice":
-        await this.newInvoice({ to: step.to!, amount: step.amount!, asset: step.asset, expiresInSec: step.expiresInSec });
+        await this.newInvoice({
+          to: step.to!,
+          amount: step.amount!,
+          asset: step.asset,
+          expiresInSec: step.expiresInSec,
+          hold: step.hold,
+          finalExpiryDeltaSec: step.finalExpiryDeltaSec,
+        });
+        return { result: null };
+      case "settle_invoice": {
+        const { handle, result } = await this.#settle(
+          step.node!,
+          this.#lastInvoice.get(step.node!),
+          step.wrongPreimage ? WRONG_PREIMAGE : undefined,
+        );
+        return { handle, result: result.error === null ? {} : { error: result.error } };
+      }
+      case "cancel_invoice": {
+        const { handle, result } = await this.#cancel(step.node!, this.#lastInvoice.get(step.node!));
+        return { handle, result: result.error === null ? {} : { error: result.error } };
+      }
+      case "close_channel": {
+        const { handle, result } = await this.#close({ from: step.from!, to: step.to!, force: step.force });
+        return { handle, result: result.error === null ? {} : { error: result.error } };
+      }
+      case "disconnect_peer":
+        await this.disconnectPeer(step.from!, step.to!);
+        return { result: null };
+      case "connect_peer":
+        await this.connectPeer(step.from!, step.to!);
         return { result: null };
       case "wait":
         await sleep(step.durationSec! * 1000);
@@ -548,6 +903,12 @@ export class ScenarioRuntime {
         return { result: null };
       case "start_node":
         await this.startNode(step.node!);
+        return { result: null };
+      case "pause_node":
+        await this.pauseNode(step.node!);
+        return { result: null };
+      case "resume_node":
+        await this.resumeNode(step.node!);
         return { result: null };
       case "mine":
         await this.mine(step.blocks ?? 1);
@@ -560,17 +921,27 @@ export class ScenarioRuntime {
     }
   }
 
-  /** Run one seed step and, if it declares `expect`, record what it found on the step itself. */
-  async runStep(step: SeedStep): Promise<StepCheck[]> {
-    const expect = step.expect;
+  #paymentAsset(step: SeedStep): Asset {
+    return step.asset ?? (step.from === undefined ? undefined : this.#lastPayment.get(step.from)?.asset) ?? "CKB";
+  }
+
+  /** Run one seed step and record what its expectations found on the step itself. */
+  async runStep(step: SeedStep, options: { verify?: boolean } = {}): Promise<StepCheck[]> {
+    const verify = options.verify ?? true;
+    const expect = verify ? step.expect : undefined;
     const before = expect !== undefined && needsBeforeState(expect) ? await this.#statePoint(expect) : null;
     const { handle, result } = await this.#perform(step);
-    if (expect === undefined) return [];
+    if (!verify) return [];
 
+    const refusal = result?.error === undefined ? null : String(result.error);
     const checks = [
-      ...(step.action === "send_payment" ? evaluatePayment(expect, result, step.asset ?? "CKB") : []),
-      ...(await this.checkState(expect, before)),
+      ...(expect !== undefined && PAYMENT_ACTIONS.includes(step.action)
+        ? evaluatePayment(expect, result, this.#paymentAsset(step))
+        : []),
+      ...(REFUSABLE_ACTIONS.includes(step.action) ? evaluateRefusal(step.action, expect?.error, refusal) : []),
+      ...(expect === undefined ? [] : await this.checkState(expect, before)),
     ];
+    if (checks.length === 0) return [];
     if (handle === undefined) this.#store.checkLastStep(checks);
     else handle.check(checks);
     if (step.action === "assert") handle?.end({ match: checks.every((c) => c.match) }, await this.channelSnapshots());
@@ -585,7 +956,7 @@ export class ScenarioRuntime {
    *  that was right the first time cannot be right after the same payment is sent again. */
   async repeatSeedSteps(): Promise<void> {
     for (const step of this.#scenario.seed) {
-      if (step.action !== "assert") await this.runStep({ ...step, expect: undefined });
+      if (step.action !== "assert") await this.runStep(step, { verify: false });
     }
   }
 }

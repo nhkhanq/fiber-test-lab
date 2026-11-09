@@ -42,7 +42,7 @@ Viewer chỉ **đọc** run-log, không gọi RPC vào node — sau `reset` cont
 
 ## Scenarios
 
-Mọi payment dùng keysend (`target_pubkey` + `amount`, không cần invoice). Số tiền tính bằng CKB.
+Payment dùng keysend (`target_pubkey` + `amount`) trừ khi scenario tạo invoice. Số tiền tính bằng CKB.
 
 ### `direct-channel`
 - **Topology:** alice → bob (1 kênh, capacity 500 CKB).
@@ -98,8 +98,43 @@ Mọi payment dùng keysend (`target_pubkey` + `amount`, không cần invoice). 
 - **Expect:** `status: succeeded`.
 - **Kết quả thật:** seeder tự **mint sUDT** cho alice (owner = lock hash key genesis) qua @ckb-ccc → mở kênh với `funding_udt_type_script` → `send_payment` kèm `udt_type_script` (đơn vị token, KHÔNG ×1e8) → **Success** (E8-4). `RUSD` ↔ script `simple_udt` code_hash `0xe1e354…` (hash_type data), FNN nhận diện qua `ckb.udt_whitelist`.
 
+### `hold-invoice-settle`
+- **Topology:** member → hub → organizer (mỗi kênh 1000 CKB).
+- **Seed:** tạo hold invoice 10 CKB → settle sớm → member trả (`waitFor: inflight`) → settle sai preimage → settle đúng → `await_payment`.
+- **Kết quả thật:** settle sớm bị từ chối `Invoice is still open`. Khi đang giữ: payment `Inflight`, invoice `Received`, member vẫn `local` 901 nhưng `offered` 10,01, organizer `local` 0 và `received` 10. Sai preimage bị từ chối `Hash mismatch`. Đúng preimage: invoice `Paid`, payment `Success`, fee 0,01.
+
+### `hold-invoice-cancel`
+- **Topology:** member → hub → organizer.
+- **Seed:** hold invoice 20 CKB → member trả → organizer `cancel_invoice` → `await_payment`.
+- **Kết quả thật:** invoice `Cancelled`, payment `Failed` với `failed_error: InvoiceCancelled` (`invoice_cancelled`), member về lại `local` 901.
+
+### `channel-close`
+- **Topology:** alice → bob (500 CKB).
+- **Seed:** alice trả bob 100 → alice đóng kênh thường.
+- **Kết quả thật:** hai bên `Closed (COOPERATIVE)`. On-chain: alice +399,99999462 (301 + 99 reserve, trừ phí đóng), bob +199 (100 + 99 đã góp lúc mở).
+
+### `channel-force-close`
+- **Topology:** alice → bob (500 CKB).
+- **Seed:** alice trả bob 100 → alice force-close → `advance_epochs: 8`.
+- **Kết quả thật:** alice `Closed (UNCOOPERATIVE_LOCAL|WAITING_ONCHAIN_SETTLEMENT)`. Sau độ trễ commitment: alice +399,99999216, bob +198,99998906 on-chain.
+
+### `peer-reconnect`
+- **Topology:** alice → bob (500 CKB).
+- **Seed:** trả 10 → `disconnect_peer` → trả 10 → `connect_peer` → trả 10.
+- **Kết quả thật:** khi ngắt, payment fail đồng bộ (`peer_offline`). Nối lại là trả được ngay trên cùng kênh, alice còn `local` 381.
+
+### `restart-during-hold`
+- **Topology:** member → hub → organizer.
+- **Seed:** giữ 10 CKB → kill rồi start organizer → settle; giữ 7 CKB → kill member → settle → start member.
+- **Kết quả thật:** sau restart invoice vẫn `Received` và TLC còn nguyên, settle thành công. Settle được cả khi người trả đang tắt; lúc quay lại payment của họ là `Success`.
+
+### `frozen-peer`
+- **Topology:** alice → bob (500 CKB).
+- **Seed:** `pause_node bob` → alice trả (`timeoutSec: 4`) → `resume_node bob` → `await_payment`.
+- **Kết quả thật:** sau 4 giây payment vẫn chưa ngã ngũ và được báo `timeout`, không phải `failed`. Bob tỉnh lại thì payment `Success`.
+
 ## Exit codes (mọi lệnh CLI)
 
 `0` ok · `1` lỗi config/validation · `2` lỗi runtime (docker/RPC) · `3` expect không khớp.
 
-Chạy cả danh mục: `fiber-lab test --all` (9 scenario, ~5 phút trên máy 12 CPU, kể cả dựng và dọn từng cụm). Chọn theo nhóm: `fiber-lab test --tag smoke`.
+Chạy cả danh mục: `fiber-lab test --all` (16 scenario, ~10 phút trên máy 12 CPU, kể cả dựng và dọn từng cụm). Chọn theo nhóm: `fiber-lab test --tag smoke`.

@@ -11,6 +11,7 @@ import {
   FNN_GOSSIP_STORE_INTERVAL_MS,
   FNN_RPC_PORT,
   FNN_SECRET_KEY_PASSWORD,
+  FNN_WATCHTOWER_CHECK_INTERVAL_SECONDS,
   WORK_DIR,
 } from "../lib/constants";
 
@@ -119,6 +120,7 @@ export function buildComposeProject(
         FNN_RPC_PORT: String(FNN_RPC_PORT),
         FIBER_GOSSIP_NETWORK_MAINTENANCE_INTERVAL_MS: String(FNN_GOSSIP_NETWORK_INTERVAL_MS),
         FIBER_GOSSIP_STORE_MAINTENANCE_INTERVAL_MS: String(FNN_GOSSIP_STORE_INTERVAL_MS),
+        FIBER_WATCHTOWER_CHECK_INTERVAL_SECONDS: String(FNN_WATCHTOWER_CHECK_INTERVAL_SECONDS),
       },
       volumes: [`${fnnNodeDir(runId, node)}:${FNN_BASE_DIR}`],
       command: ["-d", FNN_BASE_DIR, "-c", `${FNN_BASE_DIR}/config.yml`],

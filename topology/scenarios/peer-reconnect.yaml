@@ -1,0 +1,40 @@
+name: peer-reconnect
+description: Payments fail while a peer is disconnected and work again after reconnecting, on the same channel
+tags: [lifecycle, connectivity]
+nodes: [alice, bob]
+channels:
+  - { from: alice, to: bob, capacity: 500 }
+seed:
+  - action: send_payment
+    from: alice
+    to: bob
+    amount: 10
+    expect:
+      status: succeeded
+  - action: disconnect_peer
+    from: alice
+    to: bob
+    expect:
+      peers:
+        - { node: alice, peer: bob, connected: false }
+  - action: send_payment
+    from: alice
+    to: bob
+    amount: 10
+    expect:
+      status: failed
+      reason: peer_offline
+  - action: connect_peer
+    from: alice
+    to: bob
+    expect:
+      peers:
+        - { node: alice, peer: bob, connected: true }
+  - action: send_payment
+    from: alice
+    to: bob
+    amount: 10
+    expect:
+      status: succeeded
+      balances:
+        - { node: alice, peer: bob, remote: 20 }

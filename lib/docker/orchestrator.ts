@@ -150,10 +150,21 @@ export async function killNode(container: string): Promise<void> {
   if (r.code !== 0) throw new DockerError(`docker kill failed (${container})`, r.stderr);
 }
 
-export async function startNode(container: string, config: GlobalConfig): Promise<void> {
+export async function startNode(container: string, config: GlobalConfig): Promise<string | null> {
   const r = await docker(["start", container]);
   if (r.code !== 0) throw new DockerError(`docker start failed (${container})`, r.stderr);
   await waitForReady([container], config);
+  return hostEndpoint(container, FNN_RPC_PORT);
+}
+
+export async function pauseNode(container: string): Promise<void> {
+  const r = await docker(["pause", container]);
+  if (r.code !== 0) throw new DockerError(`docker pause failed (${container})`, r.stderr);
+}
+
+export async function resumeNode(container: string): Promise<void> {
+  const r = await docker(["unpause", container]);
+  if (r.code !== 0) throw new DockerError(`docker unpause failed (${container})`, r.stderr);
 }
 
 export function shouldKeepOnFailure(config: GlobalConfig, keepFlag?: boolean): boolean {

@@ -2,6 +2,7 @@ import type { ErrorCategory } from "./schema";
 
 const RULES: { pattern: RegExp; category: ErrorCategory }[] = [
   { pattern: /invoice is expired|invoice.*expired/i, category: "invoice_expired" },
+  { pattern: /InvoiceCancelled|invoice.*cancelled/i, category: "invoice_cancelled" },
   { pattern: /max outbound liquidity.*insufficient|Insufficient balance/i, category: "insufficient_outbound" },
   { pattern: /no path found|PathFind error/i, category: "no_route_found" },
 ];

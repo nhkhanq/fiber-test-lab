@@ -1,5 +1,5 @@
 import type { StepRecord } from "../runlog/store";
-import type { CheckResult } from "./assertions";
+import { paymentState, type CheckResult, type PaymentResult } from "./assertions";
 import { classifyFailure } from "./errorCategory";
 import type { Channel, ErrorCategory, Scenario } from "./schema";
 
@@ -24,7 +24,7 @@ export interface FailedCheck {
 export interface ExpectationResult {
   match: boolean;
   expected: "succeeded" | "failed" | null;
-  actual: "succeeded" | "failed" | null;
+  actual: "succeeded" | "failed" | "timeout" | null;
   routeHops?: RouteHopsResult;
   reason?: ReasonResult;
   stepChecks: number;
@@ -91,8 +91,9 @@ export function verifyExpectation(scenario: Scenario, steps: StepRecord[]): Expe
     return result;
   }
 
-  const allSucceeded = payments.every((p) => (p.result as { status?: string } | null)?.status === "Success");
-  result.actual = allSucceeded ? "succeeded" : "failed";
+  const states = payments.map((p) => paymentState(p.result as PaymentResult | null));
+  const allSucceeded = states.every((s) => s === "succeeded");
+  result.actual = allSucceeded ? "succeeded" : states.includes("timeout") ? "timeout" : "failed";
   result.match &&= result.actual === expect.status;
 
   if (expect.routeHops !== undefined) {

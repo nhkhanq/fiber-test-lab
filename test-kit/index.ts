@@ -1,6 +1,7 @@
 export {
   setupScenario,
   type ChannelBalances,
+  type HoldInvoiceOptions,
   type InvoiceOptions,
   type OpenChannelOptions,
   type PayOptions,
@@ -17,5 +18,11 @@ export {
   type ChannelStateExpectation,
 } from "./expect";
 export { subscribePayments, type PaymentWatcher } from "../lib/fiber/subscribe";
-export type { CreatedInvoice, OpenedChannel, PaymentOutcome } from "../lib/scenario/runtime";
-export type { ScenarioInput } from "../lib/scenario/schema";
+export type {
+  ClosedChannel,
+  CreatedInvoice,
+  InvoiceActionResult,
+  OpenedChannel,
+  PaymentOutcome,
+} from "../lib/scenario/runtime";
+export type { PaymentState, ScenarioInput } from "../lib/scenario/schema";
