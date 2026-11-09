@@ -47,6 +47,8 @@ git restore package.json package-lock.json fiber-lab.config.ts
 
 Workflow `Release` chạy khi có tag `v*`. Nó kiểm tra tag khớp version và version khớp FNN đã pin, chạy typecheck, unit test, consumer test, mọi scenario và test-kit trên bản FNN đó, rồi mới publish. Version đã có trên npm thì bỏ qua.
 
+Cùng workflow đó, job `publish-github` đăng bản `@nhkhanq/fiber-test-lab` lên GitHub Packages, để package hiện trong mục Packages của repo. Các dự án vẫn cài từ npmjs, vì registry của GitHub đòi token kể cả khi chỉ đọc.
+
 Cấu hình một lần, chỉ làm khi đã sẵn sàng đẩy tag: cấu hình mới phải có một lần publish thành công trong 2 ngày, nếu không sẽ hết hạn và phải xóa đi tạo lại.
 
 Trên npmjs.com, vào Packages, chọn `fiber-test-lab`, Settings, Trusted publishing, chọn GitHub Actions và điền đúng chữ hoa chữ thường:

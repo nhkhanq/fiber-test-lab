@@ -83,3 +83,33 @@ jobs:
           else
             npm publish --access public --tag "$DIST_TAG"
           fi
+
+  # GitHub's registry only takes a name scoped to the owner, and this is what fills the repository's
+  # Packages list. npmjs stays the place to install from: GitHub asks for a token even to read.
+  publish-github:
+    needs: [check, scenarios, test-kit]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://npm.pkg.github.com
+          scope: "@nhkhanq"
+          package-manager-cache: false
+      - run: npm ci
+      - name: Publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.check.outputs.version }}
+          DIST_TAG: ${{ needs.check.outputs.dist_tag }}
+        run: |
+          npm pkg set name=@nhkhanq/fiber-test-lab
+          if npm view "@nhkhanq/fiber-test-lab@$VERSION" version 2>/dev/null | grep -q .; then
+            echo "@nhkhanq/fiber-test-lab@$VERSION is already on GitHub Packages."
+          else
+            npm publish --tag "$DIST_TAG"
+          fi
