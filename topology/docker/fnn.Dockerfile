@@ -14,7 +14,7 @@ RUN case "${TARGETARCH:-amd64}" in \
         arm64) arch=aarch64 ;; \
         *) echo "FNN has no Linux release for ${TARGETARCH}" >&2; exit 1 ;; \
     esac \
-    && curl -fsSL -o /tmp/fnn.tar.gz \
+    && curl -fsSL --retry 8 --retry-delay 5 --retry-all-errors -o /tmp/fnn.tar.gz \
         "https://github.com/nervosnetwork/fiber/releases/download/v${FNN_VERSION}/fnn_v${FNN_VERSION}-${arch}-linux-portable.tar.gz" \
     && tar -xzf /tmp/fnn.tar.gz -C /tmp \
     && mv /tmp/fnn /tmp/fnn-cli /usr/local/bin/ \
@@ -23,7 +23,7 @@ RUN case "${TARGETARCH:-amd64}" in \
 
 RUN mkdir -p /fiber-scripts \
     && for c in auth funding-lock commitment-lock simple_udt xudt_rce; do \
-         curl -fsSL --retry 8 --retry-delay 5 \
+         curl -fsSL --retry 8 --retry-delay 5 --retry-all-errors \
               -o "/fiber-scripts/$c" "${FIBER_CONTRACTS_URL}/$c" \
          && sleep 3; \
        done
