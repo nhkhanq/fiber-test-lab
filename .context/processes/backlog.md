@@ -221,6 +221,13 @@ tags: [backlog, tasks, tickets]
 **E10-6** ✅ · Docker-free unit tests for schema, verification, classification, chain driver, compose and reporting · est 2
 **E10-7** ✅ · FNN 0.9.1, real `fnnVersion` config, shared versioned images · est 2
 
+## EPIC E11 — Channel and payment lifecycle
+
+**E11-1** ✅ · Hold invoices: `hold`, `settle_invoice`, `cancel_invoice`, refusals as `expect.error`, TLC balances · est 3
+**E11-2** ✅ · Four payment outcomes: `waitFor: inflight`, `await_payment`, `timeoutSec`, `timeout` never reported as a failure · est 2
+**E11-3** ✅ · Closing channels: cooperative and forced, on-chain results, mining while a chain-dependent check waits · est 3
+**E11-4** ✅ · Connectivity: `disconnect_peer`, `connect_peer`, `pause_node`, `resume_node`, restart with a TLC pending, endpoints follow a restart · est 3
+
 ## Total estimate
 
 - Must-have (E0–E7): ~65 points

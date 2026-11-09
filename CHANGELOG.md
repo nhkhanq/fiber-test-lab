@@ -22,6 +22,16 @@ and `@ckb-ccc/fiber` versions recorded in [`docs/scenario-catalog.md`](docs/scen
   JUnit and HTML reports. Scenarios gain `tags`.
 - **CI.** A reusable GitHub Action (`action.yml`), a CI workflow with an FNN version matrix, and a
   workflow publishing `linux/amd64` and `linux/arm64` images to GHCR.
+- **Channel and payment lifecycle.** Hold invoices (`hold`, `settle_invoice`, `cancel_invoice`, and
+  `ctx.newHoldInvoice`, `settleInvoice`, `cancelInvoice`), channel closes both cooperative and forced
+  (`close_channel`, `ctx.closeChannel`), and connectivity faults (`disconnect_peer`, `connect_peer`,
+  `pause_node`, `resume_node`). Seven new scenarios cover them.
+- **Payments have four outcomes.** `waitFor: inflight` leaves a payment on its way, `await_payment`
+  follows it, and a wait that runs out reports `timeout` instead of a failure. `ctx.pay` returns a
+  `state` for the same four values.
+- Step expectations gain `error` (a refusal the step must get), `peers`, TLC amounts in balance
+  checks (`offered`, `received`) and `flags` on channel checks. New failure reason
+  `invoice_cancelled`.
 - **Up to 5 nodes per scenario**, with a warning above 3; genesis now funds 6 accounts.
 - A Docker-free unit suite: `npm run test:unit`. `npm run test:integration` runs the rest.
 - `reset --images` deletes the images the lab has built.
@@ -59,6 +69,9 @@ and `@ckb-ccc/fiber` versions recorded in [`docs/scenario-catalog.md`](docs/scen
 - The CKB image no longer depends on the Ubuntu 20.04 apt archive, which could fail a fresh build.
 - `peer_offline` no longer misfires for a payer with no channel to the target.
 - `cli/index.ts` is checked out with LF on Windows, so its shebang works.
+- A restarted node keeps working: Docker gives it a new host port, which every endpoint now follows.
+- Paying an invoice waits for gossip like a keysend does, instead of failing with `no path found`
+  right after a multi-hop topology comes up.
 
 ## 1.1.0 — 2026-09-22
 

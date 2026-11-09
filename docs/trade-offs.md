@@ -13,8 +13,14 @@ Fiber Test Lab đánh đổi có chủ đích để đạt mục tiêu chính: *
 - Mặc định không có miner: chain chỉ tiến khi lab gọi `generate_block`, và lab chỉ làm vậy trong lúc chờ một thứ on-chain. Nhờ đó mở kênh còn ~3–4,5s thay vì ~35s và giữa các step chain đứng yên.
 - Đổi lại, nhịp block không giống mạng thật. Ứng dụng tự mở kênh và chờ block đến sẽ treo trừ khi scenario đặt `chain.mining: auto` hoặc test gọi `ctx.mine()`.
 
+## Thời gian thực không tua được
+
+- Block và epoch thì tua được bằng `mine` và `advance_epochs`, nên độ trễ force-close tính theo epoch chạy trong vài giây. Hạn của TLC và invoice thì theo đồng hồ thật của FNN, không tua được. Muốn kiểm tra một hold hết hạn thật phải chờ thật, ít nhất cỡ 160 phút.
+- Watchtower được đặt quét mỗi 2 giây (mặc định 60 giây) để force-close quyết toán nhanh. Bên không chủ động force-close vẫn có thể báo `ChannelReady` một lúc sau khi kênh đã đóng; scenario chỉ kiểm tra số dư on-chain của bên đó.
+
 ## "Peer offline" là mô phỏng
 
+- `pause_node` dùng `docker pause` để node đứng im mà vẫn giữ kết nối, trạng thái khiến payment thường treo chưa ngã ngũ.
 - Scenario tắt node bằng `docker kill` (không graceful) để giả lập peer offline — khác một node bị mất mạng thật ngoài đời (timeout tầng TCP/gossip có thể lệch). Đủ để tái tạo lớp lỗi, không phải mô phỏng mạng đầy đủ.
 
 ## Xác định hop bằng fee, không có route

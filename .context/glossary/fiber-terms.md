@@ -44,6 +44,9 @@ A payment doesn't need a direct sender-receiver channel — it can go through an
 ## Invoice
 A payment request (a Bech32m string): amount, asset, payment_hash, expiry, description.
 
+## Hold invoice
+An invoice created from a payment hash without its preimage. The payment arrives and stays locked (`get_payment` says `Inflight`, `get_invoice` says `Received`) until the receiver calls `settle_invoice` with the preimage or `cancel_invoice`. The amount shows in `offered_tlc_balance` and `received_tlc_balance`; `local_balance` does not change until it settles.
+
 ## Shannon
 The smallest CKB unit. 1 CKB = 100,000,000 Shannon.
 
@@ -59,7 +62,7 @@ FNN's JSON-RPC 2.0 interface. The main methods Test Lab calls:
 A stablecoin on the CKB testnet (a UDT). Used for the multi-asset scenario (v2 stretch).
 
 ## ErrorCategory (Test Lab's normalized error codes)
-The set of error codes Test Lab uses in `expect.reason`: `insufficient_outbound`, `no_route_found`, `peer_offline`, `invoice_expired`. The schema accepts only categories a classifier can produce.
+The set of error codes Test Lab uses in `expect.reason`: `insufficient_outbound`, `no_route_found`, `peer_offline`, `invoice_expired`, `invoice_cancelled`. The schema accepts only categories a classifier can produce.
 
 FNN always returns JSON-RPC `code: -32000` (generic), so failures must be classified by a **substring of the `message`** — see `lib/scenario/errorCategory.ts::mapError()` and `docs/hands-on/rpc-notebook.md` sections 8/9. Mappings verified against a real node (FNN 0.8.0, re-verified on 0.9.1):
 
@@ -69,6 +72,7 @@ FNN always returns JSON-RPC `code: -32000` (generic), so failures must be classi
 | `no_route_found` | message: `PathFind error: no path found` | E5-2 |
 | `peer_offline` | **the target is no longer in `list_peers`** (an offline peer produces a message IDENTICAL to `insufficient_outbound`'s "max outbound liquidity 0" — the two must be distinguished by connectivity, not by message) | E8-2 |
 | `invoice_expired` | message: `invoice is expired` (`InvalidParameter: Failed to validate payment request`) | E8-1 |
+| `invoice_cancelled` | `failed_error`: `InvoiceCancelled` | E11-1 |
 
 Because `peer_offline` shares its message with `insufficient_outbound`, classification goes through `classifyFailure()`: it prioritizes `peerConnected === false` -> `peer_offline`, and only falls back to `mapError()` by message otherwise. Candidates with no scenario that reproduces them yet (`amount_out_of_range`, `asset_mismatch`, `channel_not_ready`, `reserve_violation`, `insufficient_inbound`) are not accepted until one does. Recording them officially in `decisions-log.md` requires human confirmation.
 

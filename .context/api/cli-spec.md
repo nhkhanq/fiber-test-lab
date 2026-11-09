@@ -78,4 +78,4 @@ const ctx = await setupScenario("insufficient-capacity")   // ~ up + seed
 await expectPaymentFails(ctx, ctx.lastPaymentId, "insufficient_outbound")
 await ctx.reset()
 ```
-`ctx` includes: `runId`, a function to call RPC by node name, `lastPaymentId`, `reset()`, and methods that act on the run and land in its run-log: `pay`, `payInvoice`, `newInvoice`, `openChannel`, `killNode`, `startNode`, `mine`, `advanceEpochs`, `balances`, `onchainCapacity`. `setupScenario` also accepts a scenario object, validated by the same rules as a file.
+`ctx` includes: `runId`, a function to call RPC by node name, `lastPaymentId`, `reset()`, and methods that act on the run and land in its run-log: `pay`, `payInvoice`, `awaitPayment`, `newInvoice`, `newHoldInvoice`, `settleInvoice`, `cancelInvoice`, `openChannel`, `closeChannel`, `disconnectPeer`, `connectPeer`, `killNode`, `startNode`, `pauseNode`, `resumeNode`, `mine`, `advanceEpochs`, `balances`, `onchainCapacity`. `setupScenario` also accepts a scenario object, validated by the same rules as a file.

@@ -412,7 +412,9 @@ channels:                          # optional, defaults to []
     asset: CKB | RUSD               # optional, defaults to CKB
 
 seed:                               # optional, defaults to []
-  - action: send_payment | new_invoice | wait | kill_node | start_node | mine | advance_epochs | assert
+  - action: send_payment | await_payment | new_invoice | settle_invoice | cancel_invoice | close_channel
+      | disconnect_peer | connect_peer | wait | kill_node | start_node | pause_node | resume_node
+      | mine | advance_epochs | assert
     from: string                    # send_payment: required
     to: string                      # send_payment, new_invoice: required
     amount: number                  # send_payment, new_invoice: required
@@ -421,7 +423,14 @@ seed:                               # optional, defaults to []
                                        # instead of a keysend payment
     expiresInSec: number              # new_invoice: optional invoice expiry
     durationSec: number               # wait: required
-    node: string                      # kill_node, start_node: required, must be one of `nodes`
+    node: string                      # kill_node, start_node, pause_node, resume_node, settle_invoice,
+                                       # cancel_invoice: required, must be one of `nodes`
+    hold: boolean                     # new_invoice: the payment waits for settle_invoice or cancel_invoice
+    finalExpiryDeltaSec: number       # new_invoice: optional
+    waitFor: final | inflight         # send_payment: optional, defaults to final
+    timeoutSec: number                # send_payment, await_payment: optional, how long to watch
+    wrongPreimage: boolean            # settle_invoice: settle with a preimage that cannot match
+    force: boolean                    # close_channel: a unilateral close
     blocks: number                    # mine: optional, defaults to 1
     epochs: number                    # advance_epochs: required
     expect: StepExpectation           # optional on any step, required on assert (see below)
@@ -455,6 +464,14 @@ Amounts are interpreted in CKB units for the `CKB` asset, and in raw token units
 | `wait` | `durationSec` | Sleeps for the given duration, most commonly used to let an invoice expire. |
 | `kill_node` | `node` | Forcibly kills the node's container (`docker kill`), simulating an abrupt peer disconnect. |
 | `start_node` | `node` | Restarts a previously killed container and waits for it to become healthy again. |
+| `await_payment` | `from` | Waits for that node's last payment to finish. |
+| `settle_invoice` | `node` | Settles the node's last hold invoice with its preimage. A refusal fails the scenario unless `expect.error` names it. |
+| `cancel_invoice` | `node` | Cancels the node's last invoice, which also releases a held payment. Refusals work as for `settle_invoice`. |
+| `close_channel` | `from`, `to` | Closes their channel, mining until it is closed. With `force: true`, a unilateral close, waited for on `from` only. Refusals work as for `settle_invoice`. |
+| `disconnect_peer` | `from`, `to` | Drops the connection and waits until it is gone. FNN does not redial by itself. |
+| `connect_peer` | `from`, `to` | Reconnects and waits until the peer is listed. |
+| `pause_node` | `node` | Freezes the container (`docker pause`): it keeps its connections and answers nothing, which leaves a payment to it undecided. |
+| `resume_node` | `node` | Unfreezes it. |
 | `mine` | none | Mines `blocks` blocks (default 1), packing whatever is in the transaction pool. |
 | `advance_epochs` | `epochs` | Jumps the chain forward, for anything gated on an epoch such as a force-close delay. |
 | `assert` | `expect` | Changes nothing; runs its state checks at this point in the sequence. |
@@ -470,13 +487,15 @@ and the run-log records the result of each one on its step.
   to: bob
   amount: 100
   expect:
-    status: succeeded                # send_payment only
-    fee: 0                           # send_payment only
-    # reason: insufficient_outbound  # send_payment only, requires status: failed
+    status: succeeded                # send_payment, await_payment
+    fee: 0                           # send_payment, await_payment
+    # reason: insufficient_outbound  # send_payment, await_payment; requires status: failed
     balances:
       - { node: alice, peer: bob, local: 301, remote: 100, localDelta: -100 }
     channels:
-      - { node: alice, peer: bob, state: ChannelReady }
+      - { node: alice, peer: bob, state: ChannelReady }   # optional flags: COOPERATIVE
+    peers:
+      - { node: alice, peer: bob, connected: true }
     invoices:
       - { node: bob, status: Paid }    # the last invoice this node created
     onchain:
@@ -488,7 +507,40 @@ UDT. `local` and `remote` are FNN's channel balances, which exclude the 99 CKB r
 `peer` sums across all of the node's channels in that asset. The `*Delta` forms compare with the
 state just before the step ran, so an `assert` step cannot use them. State checks are polled until
 they hold or `pollTimeoutMs` runs out, since balances settle a moment after a payment reports
-`Success`.
+`Success`. A check that depends on the chain mines while it waits.
+
+`status` has four values, because a payment you stopped watching has not failed:
+
+| Value | Meaning |
+|---|---|
+| `succeeded` | FNN reports `Success` |
+| `failed` | FNN reports `Failed`, or rejected the payment outright |
+| `inflight` | A step with `waitFor: inflight` left it on its way on purpose |
+| `timeout` | The step stopped watching and FNN had not decided. It may still settle |
+
+While a payment is held, `local` does not change: the amount shows in `offered` on the payer's side
+and `received` on the receiver's, both accepted by a balance check. `expect.error` applies to
+`settle_invoice`, `cancel_invoice` and `close_channel`, and matches part of the node's message.
+
+A hold invoice from start to finish:
+
+```yaml
+- { action: new_invoice, to: organizer, amount: 10, hold: true, finalExpiryDeltaSec: 86400 }
+- action: send_payment
+  from: member
+  to: organizer
+  amount: 10
+  useInvoice: true
+  waitFor: inflight
+  expect:
+    status: inflight
+    invoices: [{ node: organizer, status: Received }]
+- { action: settle_invoice, node: organizer, expect: { invoices: [{ node: organizer, status: Paid }] } }
+- { action: await_payment, from: member, expect: { status: succeeded } }
+```
+
+A top-level `expect` describes finished payments, so a seed that leaves one in flight declares its
+expectations on the steps.
 
 ## Built-in scenarios
 
@@ -506,6 +558,13 @@ without a file path.
 | `two-hop-bottleneck` | alice, bob, charlie | failed, reason: no_route_found | The intermediary hop's channel capacity is too small to forward the payment. |
 | `peer-offline` | alice, bob | failed, reason: peer_offline | The receiving node is killed before the payment is sent. |
 | `expired-invoice` | alice, bob | failed, reason: invoice_expired | An invoice is paid after its expiry has passed. |
+| `hold-invoice-settle` | member, hub, organizer | per step | A payment locks across two hops, an early and a wrong settle are refused, then the true preimage pays it out. |
+| `hold-invoice-cancel` | member, hub, organizer | per step | The receiver cancels a held payment and the payer gets it back. |
+| `channel-close` | alice, bob | per step | A cooperative close, with both sides' on-chain amounts checked. |
+| `channel-force-close` | alice, bob | per step | A unilateral close, paid out on-chain after the commitment delay. |
+| `peer-reconnect` | alice, bob | per step | Payments fail while disconnected and work again after reconnecting. |
+| `restart-during-hold` | member, hub, organizer | per step | A held payment survives a restart of the receiver, and settles while the payer is down. |
+| `frozen-peer` | alice, bob | per step | A payment to a frozen peer is reported as a timeout, then completes when the peer wakes. |
 
 ## Writing a custom scenario
 
@@ -613,10 +672,19 @@ interface ScenarioContext {
   watchPayments(node: string): Promise<PaymentWatcher>;
   pay(from: string, to: string, amount: number, options?: PayOptions): Promise<PaymentOutcome>;
   payInvoice(from: string, invoice: CreatedInvoice, options?: PayOptions): Promise<PaymentOutcome>;
+  awaitPayment(outcome: PaymentOutcome, options?: { timeoutMs?: number }): Promise<PaymentOutcome>;
   newInvoice(to: string, amount: number, options?: InvoiceOptions): Promise<CreatedInvoice>;
+  newHoldInvoice(to: string, amount: number, options?: HoldInvoiceOptions): Promise<CreatedInvoice>;
+  settleInvoice(invoice: CreatedInvoice, options?: { preimage?: string }): Promise<InvoiceActionResult>;
+  cancelInvoice(invoice: CreatedInvoice): Promise<InvoiceActionResult>;
   openChannel(from: string, to: string, capacity: number, options?: OpenChannelOptions): Promise<OpenedChannel>;
+  closeChannel(from: string, to: string, options?: { force?: boolean }): Promise<ClosedChannel>;
+  disconnectPeer(from: string, to: string): Promise<void>;
+  connectPeer(from: string, to: string): Promise<void>;
   killNode(node: string): Promise<void>;
   startNode(node: string): Promise<void>;
+  pauseNode(node: string): Promise<void>;
+  resumeNode(node: string): Promise<void>;
   mine(blocks?: number): Promise<bigint>;
   advanceEpochs(epochs: number): Promise<bigint>;
   balances(node: string, options?: { peer?: string; asset?: Asset }): Promise<ChannelBalances>;
@@ -646,13 +714,23 @@ interface ScenarioContext {
   the run-log, for scenario steps or assertions not covered by the built-in helpers.
 - `watchPayments(node)` -- opens a WebSocket subscription on the given node (see
   subscribePayments below).
-- `pay`, `payInvoice` -- send a payment and wait for it to finish, recorded as a `send_payment`
-  step. A failed payment resolves with `{ succeeded: false, status, error, reason }`; it does not
-  throw. `options.params` passes extra fields to `send_payment`, such as `max_fee_amount`.
+- `pay`, `payInvoice` -- send a payment and wait for it, recorded as a `send_payment` step. They
+  never throw for a payment outcome: read `state` (`succeeded`, `failed`, `inflight`, `timeout`),
+  along with `status`, `error` and `reason`. `options.waitFor: "inflight"` returns once the payment
+  is on its way, `options.timeoutMs` bounds the wait, and `options.params` passes extra fields to
+  `send_payment`, such as `max_fee_amount`.
+- `awaitPayment` -- follows a payment left in flight, or one whose earlier wait timed out, to the end.
 - `newInvoice` -- creates an invoice, returning its `address` and `paymentHash`.
+- `newHoldInvoice` -- creates an invoice whose payment waits for `settleInvoice` or `cancelInvoice`.
+  Pass `paymentHash` when the payer made the secret; otherwise the lab makes one and returns it as
+  `preimage`.
+- `settleInvoice`, `cancelInvoice` -- resolve with `{ ok, error }`, so a refusal can be asserted on.
+  `settleInvoice` takes `options.preimage` to try a different secret.
 - `openChannel` -- opens a channel the scenario did not declare and waits until both sides report
   it ready, mining as needed.
-- `killNode`, `startNode` -- the same as the `kill_node` and `start_node` seed actions.
+- `closeChannel` -- closes a channel, mining until it is closed, and resolves with `{ ok, error, channelId, flags }`.
+- `disconnectPeer`, `connectPeer`, `killNode`, `startNode`, `pauseNode`, `resumeNode` -- the same as
+  the seed actions of those names. A restarted node gets a new host port; `endpoints` follows it.
 - `mine`, `advanceEpochs` -- move the chain and return the new tip.
 - `balances`, `onchainCapacity` -- read current balances, in base units.
 - `reset()` -- tears down every Docker resource for this run. Does not delete the run-log file.
@@ -827,6 +905,7 @@ the raw error message, plus one out-of-band signal for peer connectivity.
 | `no_route_found` | Yes | Raw message contains "PathFind error: no path found". |
 | `peer_offline` | Yes | The target is no longer present in the sending node's `list_peers`, checked at the moment the payment fails. This takes priority over the message text, because an offline peer produces the same "max outbound liquidity 0" message as `insufficient_outbound`. |
 | `invoice_expired` | Yes | Raw message contains "invoice is expired". |
+| `invoice_cancelled` | Yes | `failed_error` is "InvoiceCancelled": the receiver cancelled a held payment. |
 
 Only pass a value from this list as `reason` in `expect` or as the third argument to
 `expectPaymentFails`; anything else will fail zod validation (in a scenario file) or simply
