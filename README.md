@@ -62,10 +62,12 @@ is meant to cover. The architecture and design rationale follow below the table 
   - expectPaymentSucceeds
   - expectPaymentFails
   - expectChannelState
+  - expectBalance, expectFee, expectInvoiceStatus, expectOnchainCapacity
   - subscribePayments and ctx.watchPayments
 - Error category reference
 - Run-log reference
 - Determinism and version pinning
+- Continuous integration
 - License
 
 ## Architecture
@@ -134,6 +136,14 @@ genesis, funds accounts directly from it, and runs on an isolated Docker network
 its run-id, so two runs of the same scenario never interfere with each other and always start
 from the same state.
 
+**Why the lab mines the blocks itself.** No miner runs in the devnet by default. Blocks exist only
+when the lab asks for them through `generate_block`, which is the approach FNN's own end-to-end
+suite takes. While it waits for something on-chain, such as a funding transaction reaching its
+four confirmations, the lab mines every 200 ms, so opening a channel takes about 3 seconds instead
+of 35. Between steps the chain stands still, so nothing changes under a test by accident, and a
+test can jump over a force-close delay with `advance_epochs`. A scenario for an application that
+opens channels on its own, and expects blocks to keep coming, sets `chain.mining: auto`.
+
 **Why a payment's fee is the only reliable signal of a routed hop.** FNN's `get_payment` does
 not return the route a payment took. The only observable difference between a direct payment
 and one routed through an intermediary is the fee: `0x0` for a direct channel, and a non-zero
@@ -153,8 +163,9 @@ reference below for the full classification table.
 
 - Docker with Compose v2 available as `docker compose`.
 - Node.js 20 or later.
-- Enough local resources to run up to three containers (one CKB devnet plus up to two or
-  three FNN nodes) per active scenario. Scenarios do not share containers with each other.
+- Enough local resources to run one CKB devnet plus the scenario's FNN nodes per active
+  scenario. Scenarios do not share containers with each other. Three nodes is the comfortable
+  size; up to five are allowed, and a scenario above three prints a warning.
 
 No separate build step is required. The package ships TypeScript source and runs directly
 through `tsx`, which is installed as a regular dependency.
@@ -184,7 +195,7 @@ version, results should be re-verified before being trusted.
 
 | Component | Version |
 |---|---|
-| Fiber Network Node (FNN) | 0.8.0 (commit 335a74a) |
+| Fiber Network Node (FNN) | 0.9.1 (commit 9a561b3) |
 | `@ckb-ccc/core` and `@ckb-ccc/fiber` | 0.0.0-canary-20260330023358 |
 | CKB devnet image | nervos/ckb v0.207.0 |
 | Node.js | 20 or later |
@@ -196,6 +207,7 @@ npx fiber-lab list
 npx fiber-lab up direct-channel
 npx fiber-lab logs <run-id> --rpc
 npx fiber-lab reset <run-id>
+npx fiber-lab test --all --junit results.xml
 ```
 
 `up` prints a run-id on success. Every command accepts `--json` for machine-readable output,
@@ -220,7 +232,8 @@ fiber-lab up <scenario> [--json] [--keep]
 
 Validates the scenario, generates a unique run-id, builds an isolated Docker network and the
 required containers, waits for every node to report ready, opens the declared channels, runs
-the seed steps, verifies the `expect` block, and prints the run-id.
+the seed steps, verifies every expectation, and prints the run-id. Images are built once per
+version and shared by every run.
 
 - `<scenario>` is a built-in scenario name (see Built-in scenarios) or a path to a `.yaml`
   file, resolved relative to the current working directory.
@@ -240,7 +253,8 @@ fiber-lab seed <scenario> [--run <run-id>] [--json]
 
 Re-runs only the `seed` steps of a scenario against an already running run, without reopening
 channels. Useful for sending another payment, or repeating a failure, against a topology that
-is already up.
+is already up. Expectations are not evaluated: they describe the first run, and a balance that was
+right then cannot be right after the same payment is sent again.
 
 - Without `--run`, it targets the most recent non-reset run of that scenario.
 - `--json` prints the array of steps that were just executed.
@@ -248,14 +262,45 @@ is already up.
 ### reset
 
 ```bash
-fiber-lab reset [run-id] [--all] [--json]
+fiber-lab reset [run-id] [--all] [--images] [--json]
 ```
 
 Tears down Docker resources for one run, or for every run when `--all` is passed or no
-run-id is given. Removes containers and the isolated network; the run-log JSON file is kept
-so it remains available for later inspection.
+run-id is given. Removes containers, the isolated network and the run's working directory; the
+run-log JSON file is kept so it remains available for later inspection.
 
-- `--json` prints `{ "cleaned": string[] }`, the list of run-ids that were torn down.
+- `--images` also deletes the images the lab has built, including the per-run images that
+  versions before 1.2 left behind.
+- `--json` prints `{ "cleaned": string[], "images": string[] }`.
+
+### test
+
+```bash
+fiber-lab test [scenarios...] [--all] [--tag <tag...>] [--junit <path>] [--html] [--keep] [--json]
+```
+
+Runs scenarios one after another, tears each one down, and reports the results. Every selected
+scenario is validated before the first one starts.
+
+- `[scenarios...]` are scenario names or paths. `--all` adds every built-in scenario, `--tag`
+  the built-in scenarios carrying any of the given tags. At least one selection is required.
+- `--junit <path>` also writes a JUnit XML report.
+- `--html` writes the HTML report of each run to `.fiber-lab/runs/<run-id>.html`.
+- `--keep` keeps the containers of a scenario that does not pass.
+- `--json` prints the results as JSON.
+
+Exit code 0 means everything passed, 3 that at least one scenario ran but did not match its
+expectations, and 2 that at least one could not run at all, which takes priority because it means
+the results cannot be trusted.
+
+### images
+
+```bash
+fiber-lab images [--json]
+```
+
+Builds or pulls the images for the configured versions without starting anything, so a slow download
+happens ahead of time. `--json` prints their names.
 
 ### logs
 
@@ -363,6 +408,9 @@ outcome. Full field reference:
 ```yaml
 name: string                      # required, must match the file name (without .yaml)
 description: string                # optional, shown by `list`
+tags: [string, ...]                # optional, selects scenarios for `test --tag`
+chain:
+  mining: manual | auto            # optional, defaults to manual (see Design notes)
 
 nodes: [string, ...]               # required, at least one node name
 
@@ -371,10 +419,9 @@ channels:                          # optional, defaults to []
     to: string                     # required, must be one of `nodes`, different from `from`
     capacity: number                # required, CKB units, minimum 100
     asset: CKB | RUSD               # optional, defaults to CKB
-    push: number                    # optional, currently unused by the seeder
 
 seed:                               # optional, defaults to []
-  - action: send_payment | new_invoice | wait | kill_node | start_node
+  - action: send_payment | new_invoice | wait | kill_node | start_node | mine | advance_epochs | assert
     from: string                    # send_payment: required
     to: string                      # send_payment, new_invoice: required
     amount: number                  # send_payment, new_invoice: required
@@ -384,8 +431,11 @@ seed:                               # optional, defaults to []
     expiresInSec: number              # new_invoice: optional invoice expiry
     durationSec: number               # wait: required
     node: string                      # kill_node, start_node: required, must be one of `nodes`
+    blocks: number                    # mine: optional, defaults to 1
+    epochs: number                    # advance_epochs: required
+    expect: StepExpectation           # optional on any step, required on assert (see below)
 
-expect:
+expect:                              # optional if at least one step declares its own
   status: succeeded | failed         # required
   reason: ErrorCategory               # optional, only allowed when status is failed
   routeHops: number                   # optional, non-negative integer
@@ -398,6 +448,10 @@ Validation rules enforced before any Docker resource is created:
 - A channel cannot connect a node to itself.
 - `capacity` must be at least 100 CKB (the node's minimum funding amount).
 - `expect.reason` can only be set when `expect.status` is `failed`.
+- Unknown keys are rejected, so a misspelled field fails instead of being ignored.
+- Amounts must be exact: at most 8 decimals for CKB, whole units for a UDT.
+- A scenario must declare at least one expectation, and a top-level `expect` needs a
+  `send_payment` to describe.
 
 Amounts are interpreted in CKB units for the `CKB` asset, and in raw token units for `RUSD`.
 
@@ -410,6 +464,40 @@ Amounts are interpreted in CKB units for the `CKB` asset, and in raw token units
 | `wait` | `durationSec` | Sleeps for the given duration, most commonly used to let an invoice expire. |
 | `kill_node` | `node` | Forcibly kills the node's container (`docker kill`), simulating an abrupt peer disconnect. |
 | `start_node` | `node` | Restarts a previously killed container and waits for it to become healthy again. |
+| `mine` | none | Mines `blocks` blocks (default 1), packing whatever is in the transaction pool. |
+| `advance_epochs` | `epochs` | Jumps the chain forward, for anything gated on an epoch such as a force-close delay. |
+| `assert` | `expect` | Changes nothing; runs its state checks at this point in the sequence. |
+
+### Step expectations
+
+Any step can declare what it should have produced. The scenario fails if any check does not hold,
+and the run-log records the result of each one on its step.
+
+```yaml
+- action: send_payment
+  from: alice
+  to: bob
+  amount: 100
+  expect:
+    status: succeeded                # send_payment only
+    fee: 0                           # send_payment only
+    # reason: insufficient_outbound  # send_payment only, requires status: failed
+    balances:
+      - { node: alice, peer: bob, local: 301, remote: 100, localDelta: -100 }
+    channels:
+      - { node: alice, peer: bob, state: ChannelReady }
+    invoices:
+      - { node: bob, status: Paid }    # the last invoice this node created
+    onchain:
+      - { node: alice, capacity: { min: 1000 }, capacityDelta: 0 }
+```
+
+Every amount is either an exact number or a `{ min, max }` range, in CKB or in base units for a
+UDT. `local` and `remote` are FNN's channel balances, which exclude the 99 CKB reserve. Omitting
+`peer` sums across all of the node's channels in that asset. The `*Delta` forms compare with the
+state just before the step ran, so an `assert` step cannot use them. State checks are polled until
+they hold or `pollTimeoutMs` runs out, since balances settle a moment after a payment reports
+`Success`.
 
 ## Built-in scenarios
 
@@ -472,6 +560,10 @@ import {
   expectPaymentSucceeds,
   expectPaymentFails,
   expectChannelState,
+  expectBalance,
+  expectFee,
+  expectInvoiceStatus,
+  expectOnchainCapacity,
   subscribePayments,
 } from "fiber-test-lab/test-kit";
 ```
@@ -480,20 +572,20 @@ import {
 
 ```typescript
 function setupScenario(
-  name: string,
+  input: string | ScenarioInput,
   options?: { keep?: boolean },
 ): Promise<ScenarioContext>
 ```
 
-Builds the topology, opens the declared channels, runs the seed steps, and verifies `expect`,
-exactly like `fiber-lab up`. Does not tear anything down on success or on an expectation
+Builds the topology, opens the declared channels, runs the seed steps, and verifies every
+expectation, exactly like `fiber-lab up`. Does not tear anything down on success or on an expectation
 mismatch; call `ctx.reset()` explicitly when done. On a runtime failure inside the seed steps,
 it tears down automatically unless `options.keep` is `true`.
 
 Parameters:
 
-- `name` -- a built-in scenario name, or a path to a `.yaml` file (see Writing a custom
-  scenario).
+- `input` -- a built-in scenario name, a path to a `.yaml` file (see Writing a custom
+  scenario), or a scenario object with the same shape, validated by the same rules.
 - `options.keep` -- when `true`, containers are left running after a runtime failure for
   debugging, instead of being torn down.
 
@@ -522,10 +614,22 @@ interface ScenarioContext {
   expectation: ExpectationResult | null;
   store: RunLogStore;
   endpoints: Record<string, string>;
-  lastPaymentId: string | null;
-  lastPaymentFrom: string | null;
+  ckbEndpoint: string;
+  runtime: ScenarioRuntime;
+  readonly lastPaymentId: string | null;
+  readonly lastPaymentFrom: string | null;
   call(node: string, method: string, params?: unknown[]): Promise<unknown>;
   watchPayments(node: string): Promise<PaymentWatcher>;
+  pay(from: string, to: string, amount: number, options?: PayOptions): Promise<PaymentOutcome>;
+  payInvoice(from: string, invoice: CreatedInvoice, options?: PayOptions): Promise<PaymentOutcome>;
+  newInvoice(to: string, amount: number, options?: InvoiceOptions): Promise<CreatedInvoice>;
+  openChannel(from: string, to: string, capacity: number, options?: OpenChannelOptions): Promise<OpenedChannel>;
+  killNode(node: string): Promise<void>;
+  startNode(node: string): Promise<void>;
+  mine(blocks?: number): Promise<bigint>;
+  advanceEpochs(epochs: number): Promise<bigint>;
+  balances(node: string, options?: { peer?: string; asset?: Asset }): Promise<ChannelBalances>;
+  onchainCapacity(node: string): Promise<bigint>;
   reset(): Promise<void>;
 }
 ```
@@ -533,10 +637,10 @@ interface ScenarioContext {
 - `runId` -- the unique identifier for this run. Also usable with `fiber-lab logs <runId>`.
 - `network` -- the isolated Docker network name for this run.
 - `scenario` -- the parsed scenario definition (nodes, channels, seed, expect).
-- `expectation` -- the result of comparing the scenario's `expect` block against what
-  actually happened, or `null` if the scenario had no `send_payment` steps. Shape:
-  `{ match: boolean, expected: "succeeded" | "failed", actual: "succeeded" | "failed",
-  reason?: { expected, actual, match }, routeHops?: { expected, actual, match } }`.
+- `expectation` -- the result of comparing the scenario's expectations against what actually
+  happened. Shape: `{ match: boolean, expected, actual, reason?, routeHops?, stepChecks: number,
+  failedChecks: { step, action, check }[] }`; `expected` and `actual` are `null` for a scenario
+  that only declares expectations on its steps.
 - `store` -- the run-log store; `store.data` is the full run-log object (see Run-log
   reference).
 - `endpoints` -- the host-mapped RPC endpoint for each node, keyed by node name, for example
@@ -545,11 +649,21 @@ interface ScenarioContext {
   that payment failed synchronously and never received a hash (this happens for failures like
   `insufficient_outbound` and `peer_offline`, which FNN rejects before creating a payment
   record).
-- `lastPaymentFrom` -- the node name that sent the most recent payment.
+- `lastPaymentFrom` -- the node name that sent the most recent payment. Both this and
+  `lastPaymentId` follow payments made through `ctx.pay` as well.
 - `call(node, method, params)` -- makes a raw JSON-RPC call to the named node and logs it to
   the run-log, for scenario steps or assertions not covered by the built-in helpers.
 - `watchPayments(node)` -- opens a WebSocket subscription on the given node (see
   subscribePayments below).
+- `pay`, `payInvoice` -- send a payment and wait for it to finish, recorded as a `send_payment`
+  step. A failed payment resolves with `{ succeeded: false, status, error, reason }`; it does not
+  throw. `options.params` passes extra fields to `send_payment`, such as `max_fee_amount`.
+- `newInvoice` -- creates an invoice, returning its `address` and `paymentHash`.
+- `openChannel` -- opens a channel the scenario did not declare and waits until both sides report
+  it ready, mining as needed.
+- `killNode`, `startNode` -- the same as the `kill_node` and `start_node` seed actions.
+- `mine`, `advanceEpochs` -- move the chain and return the new tip.
+- `balances`, `onchainCapacity` -- read current balances, in base units.
 - `reset()` -- tears down every Docker resource for this run. Does not delete the run-log file.
 
 ### expectPaymentSucceeds
@@ -651,6 +765,19 @@ try {
 }
 ```
 
+### expectBalance, expectFee, expectInvoiceStatus, expectOnchainCapacity
+
+```typescript
+await expectBalance(ctx, { node: "alice", peer: "bob", local: 351, remote: { min: 49 } });
+await expectFee(ctx, 0.1);                         // defaults to the last payment
+await expectInvoiceStatus(ctx, invoice, "Paid");
+await expectOnchainCapacity(ctx, "alice", { min: 1000 });
+```
+
+These take the same values as the step expectations above and poll until they hold or the timeout
+runs out. On failure they name every check that did not hold, with the expected and actual values,
+and the path of the run-log.
+
 ### subscribePayments and ctx.watchPayments
 
 ```typescript
@@ -709,15 +836,11 @@ the raw error message, plus one out-of-band signal for peer connectivity.
 | `no_route_found` | Yes | Raw message contains "PathFind error: no path found". |
 | `peer_offline` | Yes | The target is no longer present in the sending node's `list_peers`, checked at the moment the payment fails. This takes priority over the message text, because an offline peer produces the same "max outbound liquidity 0" message as `insufficient_outbound`. |
 | `invoice_expired` | Yes | Raw message contains "invoice is expired". |
-| `insufficient_inbound` | No | Reserved; no live scenario reproduces this yet. |
-| `amount_out_of_range` | No | Reserved; no live scenario reproduces this yet. |
-| `asset_mismatch` | No | Reserved; no live scenario reproduces this yet. |
-| `channel_not_ready` | No | Reserved; no live scenario reproduces this yet. |
-| `reserve_violation` | No | Reserved; no live scenario reproduces this yet. |
 
 Only pass a value from this list as `reason` in `expect` or as the third argument to
 `expectPaymentFails`; anything else will fail zod validation (in a scenario file) or simply
-never match (as a runtime argument).
+never match (as a runtime argument). A category joins this list once a live scenario reproduces it
+and a classifier can tell it apart.
 
 ## Run-log reference
 
@@ -734,16 +857,18 @@ interface RunLog {
   startedAt: string;
   finishedAt: string | null;
   network: string;
+  versions?: { fnn: string; ckb: string };
   nodes: { name: string; container: string | null; endpoint: string | null }[];
-  steps: { action: string; input: unknown; result: unknown; at: string }[];
+  steps: { action: string; input: unknown; result: unknown; at: string; checks?: CheckResult[] }[];
   rpcCalls: { node: string; method: string; params: unknown; response: unknown; error: unknown; at: string }[];
   error: string | null;
 }
 ```
 
-`steps` records one entry per seed action and per `open_channel`; `rpcCalls` records every
-single RPC request and response or error made during the run, in order, which is the primary
-tool for debugging a scenario after the containers are gone.
+`steps` records one entry per seed action and per `open_channel`, with the result of any step
+expectation in `checks`; `rpcCalls` records every single RPC request and response or error made
+during the run, in order, including those to the CKB devnet, which is the primary tool for
+debugging a scenario after the containers are gone.
 
 Inspect a run-log with the CLI:
 
@@ -764,6 +889,27 @@ FNN or `@ckb-ccc` version should not be assumed to hold, and should be re-verifi
 scenario builds an isolated Docker network and container set per run-id, so parallel or
 repeated runs do not interfere with each other, and `reset --all` removes any leftover
 resources from a run that failed to tear down on its own.
+
+## Continuous integration
+
+The repository is also a GitHub Action that installs the lab, runs the scenarios, and uploads the
+run-logs, HTML reports and JUnit file as an artifact:
+
+```yaml
+- uses: actions/checkout@v4
+- uses: nhkhanq/fiber-test-lab@canary
+  with:
+    scenarios: ./scenarios/checkout.yaml   # or all: "true", or tags: "smoke payment"
+```
+
+To test against another FNN release, set the action's `fnn-version` input, or the
+`FIBER_LAB_FNN_VERSION` environment variable anywhere else. To pull prebuilt images instead of
+building them, set `image-registry` or `FIBER_LAB_IMAGE_REGISTRY`; a missing image falls back to a
+local build. The `Publish images` workflow pushes `linux/amd64` and `linux/arm64` images to GHCR.
+
+The action caches the images between runs, so the FNN release is only downloaded when a version or
+the image definition changes. With `prepare-only: "true"` it installs the lab and gets the images,
+then stops, for a job that runs its own tests next.
 
 ## License
 

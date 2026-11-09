@@ -3,6 +3,7 @@ import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { stringify } from "yaml";
 import { fnnNodeDir } from "../../topology/compose.template";
+import type { GenesisFacts } from "../ckb/chain";
 import {
   CKB_RPC_PORT,
   CKB_SERVICE,
@@ -10,8 +11,7 @@ import {
   DEV_FUNDED_KEYS,
   FNN_P2P_PORT,
   FNN_RPC_PORT,
-  SIMPLE_UDT_CODE_HASH,
-  SIMPLE_UDT_DEP,
+  FNN_TX_TRACING_POLLING_MS,
   UDT_ASSET,
 } from "../constants";
 import type { Scenario } from "../scenario/schema";
@@ -22,7 +22,8 @@ export interface GeneratedNode {
   ckbPrivKey: string;
 }
 
-function nodeConfigYaml(node: string): string {
+export function nodeConfigYaml(node: string, genesis: GenesisFacts): string {
+  const { simpleUdt } = genesis;
   return stringify({
     fiber: {
       listening_addr: `/ip4/0.0.0.0/tcp/${FNN_P2P_PORT}`,
@@ -41,14 +42,15 @@ function nodeConfigYaml(node: string): string {
     },
     ckb: {
       rpc_url: `http://${CKB_SERVICE}:${CKB_RPC_PORT}`,
+      tx_tracing_polling_interval_ms: FNN_TX_TRACING_POLLING_MS,
       udt_whitelist: [
         {
           name: UDT_ASSET,
-          script: { code_hash: SIMPLE_UDT_CODE_HASH, hash_type: "data", args: "0x.*" },
+          script: { code_hash: simpleUdt.codeHash, hash_type: "data", args: "0x.*" },
           cell_deps: [
             {
               cell_dep: {
-                out_point: { tx_hash: SIMPLE_UDT_DEP.txHash, index: `0x${SIMPLE_UDT_DEP.index.toString(16)}` },
+                out_point: { tx_hash: simpleUdt.txHash, index: `0x${simpleUdt.index.toString(16)}` },
                 dep_type: "code",
               },
             },
@@ -61,17 +63,11 @@ function nodeConfigYaml(node: string): string {
   });
 }
 
-
 export async function generateNodeConfigs(
   scenario: Scenario,
   runId: string,
+  genesis: GenesisFacts,
 ): Promise<GeneratedNode[]> {
-  if (scenario.nodes.length > DEV_FUNDED_KEYS.length) {
-    throw new Error(
-      `Scenario "${scenario.name}" has ${scenario.nodes.length} nodes, but only ${DEV_FUNDED_KEYS.length} accounts are pre-funded in genesis.`,
-    );
-  }
-
   const generated: GeneratedNode[] = [];
 
   for (const [i, node] of scenario.nodes.entries()) {
@@ -85,7 +81,7 @@ export async function generateNodeConfigs(
     const ckbPrivKey = DEV_FUNDED_KEYS[i]!;
     await writeFile(join(dir, "ckb", "key"), ckbPrivKey);
 
-    await writeFile(join(dir, "config.yml"), nodeConfigYaml(node));
+    await writeFile(join(dir, "config.yml"), nodeConfigYaml(node, genesis));
 
     generated.push({ node, dir, ckbPrivKey });
   }

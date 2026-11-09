@@ -3,6 +3,8 @@ node_modules/
 
 # Run-logs & runtime state (mỗi run sinh động, không commit)
 .fiber-lab/runs/*.json
+.fiber-lab/runs/*.html
+.fiber-lab/*.xml
 .fiber-lab/work/
 
 # Build / cache

@@ -1,4 +1,5 @@
-import { CKB_SERVICE, SHANNON_PER_CKB, UDT_ASSET } from "../constants";
+import { CKB_SERVICE } from "../constants";
+import { formatBaseUnits } from "../fiber/amounts";
 import type { ChannelSnapshot, RunLog, RpcRecord, StepRecord } from "../runlog/store";
 
 /** A pure RunLog -> view-model transform. No I/O, no RPC: the run viewer is read-only and the
@@ -90,19 +91,11 @@ const ms = (from: string, to: string): number => Date.parse(to) - Date.parse(fro
 /** Base units -> a human amount. CKB is shannon-denominated; a UDT amount is already in its own unit. */
 export function formatAmount(raw: string | null, asset: string): string {
   if (raw === null) return "—";
-  let value: bigint;
   try {
-    value = BigInt(raw);
+    return formatBaseUnits(BigInt(raw), asset);
   } catch {
     return raw;
   }
-  if (asset === UDT_ASSET) return `${value.toString()} ${asset}`;
-
-  const whole = value / SHANNON_PER_CKB;
-  const fraction = value % SHANNON_PER_CKB;
-  if (fraction === 0n) return `${whole} CKB`;
-  const decimals = fraction.toString().padStart(8, "0").replace(/0+$/, "");
-  return `${whole}.${decimals} CKB`;
 }
 
 function stepProgress(step: StepRecord): string | null {
@@ -119,6 +112,7 @@ function stepProgress(step: StepRecord): string | null {
 }
 
 function stepOk(step: StepRecord): boolean {
+  if (step.checks?.some((c) => !c.match)) return false;
   const result = step.result as Record<string, unknown> | null;
   if (result === null || typeof result !== "object") return true;
   if ("error" in result) return false;
@@ -131,10 +125,27 @@ function describeStep(step: StepRecord): string {
   const input = (step.input ?? {}) as Record<string, unknown>;
   const result = (step.result ?? {}) as Record<string, unknown>;
   switch (step.action) {
+    case "build_images": {
+      if (step.status === "running") return stepProgress(step) ?? "preparing images";
+      const built = Array.isArray(result.built) ? result.built.length : 0;
+      const pulled = Array.isArray(result.pulled) ? result.pulled.length : 0;
+      return `${built} built, ${pulled} pulled`;
+    }
+    case "chain_ready":
+      return `${input.mining ?? "manual"} mining`;
+    case "mine":
+      return `${input.blocks} block(s), tip ${result.tip ?? "?"}`;
+    case "advance_epochs":
+      return `${input.epochs} epoch(s), tip ${result.tip ?? "?"}`;
+    case "assert": {
+      const passed = (step.checks ?? []).filter((c) => c.match).length;
+      return `${passed}/${step.checks?.length ?? 0} checks passed`;
+    }
     case "docker_up": {
       const services = Array.isArray(input.services) ? input.services.length : 0;
       if (step.status === "running") return stepProgress(step) ?? `starting ${services} services`;
-      return `${result.imagesBuilt ?? 0} images built, ${result.containersStarted ?? 0} containers started`;
+      const images = typeof result.imagesBuilt === "number" && result.imagesBuilt > 0 ? `${result.imagesBuilt} images built, ` : "";
+      return `${images}${result.containersStarted ?? 0} containers started`;
     }
     case "wait_ready": {
       const containers = Array.isArray(input.containers) ? input.containers.length : 0;
@@ -155,13 +166,24 @@ function describeStep(step: StepRecord): string {
     case "kill_node":
     case "start_node":
       return String(input.node ?? "");
-    case "expect":
-      return `expected ${result.expected}, got ${result.actual}`;
+    case "expect": {
+      const failed = Array.isArray(result.failedChecks) ? result.failedChecks.length : 0;
+      const steps = typeof result.stepChecks === "number" && result.stepChecks > 0
+        ? ` · ${result.stepChecks - failed}/${result.stepChecks} step checks`
+        : "";
+      if (typeof result.expected !== "string") return steps.slice(3);
+      return `expected ${result.expected}, got ${result.actual}${steps}`;
+    }
     case "mint_udt":
       return `${input.node}: ${input.amount} ${input.asset}`;
     default:
       return "";
   }
+}
+
+function describeFailedCheck(step: StepRecord): string {
+  const failed = step.checks?.find((c) => !c.match);
+  return failed === undefined ? "" : ` — ${failed.check}: expected ${failed.expected}, got ${failed.actual}`;
 }
 
 function errorMessageOf(error: unknown): string | null {
@@ -287,7 +309,7 @@ function buildSteps(log: RunLog): ReportStep[] {
       edges: buildEdges(step.channels ?? []),
       input: step.input,
       result: step.result,
-      summary: describeStep(step),
+      summary: `${describeStep(step)}${describeFailedCheck(step)}`,
       channels: step.channels ?? [],
     };
   });

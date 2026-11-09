@@ -1,5 +1,6 @@
 name: two-hop-bottleneck
 description: Alice pays Charlie via Bob, but the Bob-Charlie hop lacks the liquidity to forward it — routing fails
+tags: [failure, routing]
 nodes: [alice, bob, charlie]
 channels:
   - from: alice

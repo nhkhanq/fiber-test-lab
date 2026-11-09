@@ -14,14 +14,9 @@ fi
 ckb run -C "$DATA_DIR" --indexer &
 CKB_PID=$!
 
-for _ in $(seq 1 30); do
-  if curl -sf -H 'content-type: application/json' \
-      -d '{"jsonrpc":"2.0","method":"get_tip_block_number","params":[],"id":1}' \
-      http://localhost:8114 >/dev/null 2>&1; then
-    break
-  fi
-  sleep 1
-done
-ckb miner -C "$DATA_DIR" &
+if [ "${CKB_AUTO_MINE:-false}" = "true" ]; then
+  until bash /usr/local/bin/flab-ckb-rpc-ping.sh 2>/dev/null; do sleep 1; done
+  ckb miner -C "$DATA_DIR" &
+fi
 
 wait "$CKB_PID"

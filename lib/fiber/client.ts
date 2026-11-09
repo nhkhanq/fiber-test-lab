@@ -1,17 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
 import { FiberSDK, fiber } from "@ckb-ccc/fiber";
+import { jsonRpcCall, type RpcCallRecord, type RpcLogger } from "./jsonRpc";
 
-export interface RpcCallRecord {
-  node: string;
-  method: string;
-  params: unknown;
-  response?: unknown;
-  error?: unknown;
-  at: string; // ISO8601
-  durationMs?: number;
-}
-
-export type RpcLogger = (record: RpcCallRecord) => void;
+export type { RpcCallRecord, RpcLogger };
 
 export interface FiberClientOptions {
   endpoints: Record<string, string>;
@@ -66,29 +57,10 @@ export class FiberClient {
   }
 
 
-  async rawCall(node: string, method: string, params: unknown[] = []): Promise<unknown> {
-    const at = new Date().toISOString();
-    const started = performance.now();
-    const durationMs = () => Math.round(performance.now() - started);
+  rawCall(node: string, method: string, params: unknown[] = []): Promise<unknown> {
     const endpoint = this.#endpoints[node];
-    if (!endpoint) throw new Error(`Unknown node "${node}" — no endpoint configured`);
-    try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ jsonrpc: "2.0", method, params, id: Date.now() }),
-      });
-      const json = (await res.json()) as { result?: unknown; error?: { message?: string } };
-      if (json.error) {
-        this.#logger?.({ node, method, params, error: json.error, at, durationMs: durationMs() });
-        throw new Error(`RPC ${method} failed: ${json.error.message ?? JSON.stringify(json.error)}`);
-      }
-      this.#logger?.({ node, method, params, response: json.result, at, durationMs: durationMs() });
-      return json.result;
-    } catch (error) {
-      this.#logger?.({ node, method, params, error, at, durationMs: durationMs() });
-      throw error;
-    }
+    if (!endpoint) return Promise.reject(new Error(`Unknown node "${node}" — no endpoint configured`));
+    return jsonRpcCall({ node, endpoint, method, params, timeoutMs: this.#timeoutMs, logger: this.#logger });
   }
 
 

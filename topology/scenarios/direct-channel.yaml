@@ -1,5 +1,6 @@
 name: direct-channel
 description: Alice pays Bob over a single direct channel
+tags: [smoke, payment]
 nodes: [alice, bob]
 channels:
   - from: alice
@@ -10,5 +11,11 @@ seed:
     from: alice
     to: bob
     amount: 100
+    expect:
+      status: succeeded
+      fee: 0
+      balances:
+        - { node: alice, peer: bob, remote: 100, localDelta: -100 }
+        - { node: bob, peer: alice, local: 100, localDelta: 100 }
 expect:
   status: succeeded

@@ -9,6 +9,7 @@ export type {
 } from "./model";
 export { renderReport, renderRunList, type RenderOptions } from "./render";
 export { startUiServer, type UiServer } from "./server";
+export { writeRunReport } from "./write";
 // Re-exported so a report can be rendered from an entry point alone, without a deep import
 // (`exports` in package.json blocks those).
 export { RunLogStore, listRuns, type RunLog } from "../runlog/store";

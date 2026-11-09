@@ -1,14 +1,12 @@
 import { join } from "node:path";
 import { stringify } from "yaml";
 import type { GlobalConfig } from "../lib/config";
+import type { LabImages } from "../lib/docker/images";
 import type { Scenario } from "../lib/scenario/schema";
 import {
-  CKB_DOCKERFILE,
   CKB_RPC_PORT,
   CKB_SERVICE,
-  DOCKER_BUILD_CONTEXT,
   FNN_BASE_DIR,
-  FNN_DOCKERFILE,
   FNN_GOSSIP_NETWORK_INTERVAL_MS,
   FNN_GOSSIP_STORE_INTERVAL_MS,
   FNN_RPC_PORT,
@@ -30,7 +28,8 @@ interface Healthcheck {
 
 interface ComposeService {
   container_name: string;
-  build: { context: string; dockerfile: string };
+  image: string;
+  user?: string;
   networks: string[];
   restart: string;
   depends_on?: Record<string, { condition: string }>;
@@ -56,13 +55,8 @@ export function containerName(config: GlobalConfig, runId: string, node: string)
 }
 
 function ckbHealthcheck(): Healthcheck {
-  const body =
-    '{"jsonrpc":"2.0","method":"get_tip_block_number","params":[],"id":1}';
   return {
-    test: [
-      "CMD-SHELL",
-      `curl -sf -H 'content-type: application/json' -d '${body}' http://localhost:${CKB_RPC_PORT} || exit 1`,
-    ],
+    test: ["CMD", "bash", "/usr/local/bin/flab-ckb-rpc-ping.sh"],
     interval: "3s",
     timeout: "5s",
     retries: 20,
@@ -84,31 +78,29 @@ function fnnHealthcheck(): Healthcheck {
   };
 }
 
+function hostUser(): string | null {
+  return typeof process.getuid === "function" && typeof process.getgid === "function"
+    ? `${process.getuid()}:${process.getgid()}`
+    : null;
+}
+
 export function buildComposeProject(
   scenario: Scenario,
   runId: string,
   config: GlobalConfig,
+  images: LabImages,
+  user: string | null = hostUser(),
 ): ComposeProject {
   if (!runId) throw new Error("buildComposeProject: runId is empty");
-
-  if (scenario.nodes.length > config.maxNodesPerScenario) {
-    throw new Error(
-      `Scenario "${scenario.name}" has ${scenario.nodes.length} nodes, over maxNodesPerScenario=${config.maxNodesPerScenario} (machine-resource limit).`,
-    );
-  }
-  if (scenario.nodes.includes(CKB_SERVICE)) {
-    throw new Error(
-      `Node name "${CKB_SERVICE}" collides with the CKB devnet service — rename the node in the scenario.`,
-    );
-  }
 
   const net = networkName(config, runId);
   const services: Record<string, ComposeService> = {
     [CKB_SERVICE]: {
       container_name: containerName(config, runId, CKB_SERVICE),
-      build: { context: DOCKER_BUILD_CONTEXT, dockerfile: CKB_DOCKERFILE },
+      image: images.ckb,
       networks: [net],
       restart: "unless-stopped",
+      environment: { CKB_AUTO_MINE: scenario.chain.mining === "auto" ? "true" : "false" },
       ports: [`127.0.0.1::${CKB_RPC_PORT}`],
       healthcheck: ckbHealthcheck(),
     },
@@ -117,7 +109,8 @@ export function buildComposeProject(
   for (const node of scenario.nodes) {
     services[node] = {
       container_name: containerName(config, runId, node),
-      build: { context: DOCKER_BUILD_CONTEXT, dockerfile: FNN_DOCKERFILE },
+      image: images.fnn,
+      ...(user === null ? {} : { user }),
       networks: [net],
       restart: "unless-stopped",
       depends_on: { [CKB_SERVICE]: { condition: "service_healthy" } },

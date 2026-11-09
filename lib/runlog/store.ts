@@ -25,12 +25,20 @@ export const ChannelSnapshotSchema = z.object({
   remoteBalance: z.string().nullable().default(null),
 });
 
+export const CheckResultSchema = z.object({
+  check: z.string(),
+  expected: z.string(),
+  actual: z.string(),
+  match: z.boolean(),
+});
+
 export const StepRecordSchema = z.object({
   action: z.string(),
   input: z.unknown().nullable().default(null),
   result: z.unknown().nullable().default(null),
   at: z.string(),
   channels: z.array(ChannelSnapshotSchema).optional(),
+  checks: z.array(CheckResultSchema).optional(),
   /** Set by beginStep/endStep for work long enough to watch (image builds, waiting for READY,
    *  opening a channel). Absent on a step recorded in one shot, and on every pre-2026-09-22
    *  run-log, both of which are complete by definition. */
@@ -53,6 +61,8 @@ export const RunLogSchema = z.object({
   startedAt: z.string(),
   finishedAt: z.string().nullable().default(null),
   network: z.string(),
+  /** The versions this run actually used — a result only holds for these (BR-DET-002). */
+  versions: z.object({ fnn: z.string(), ckb: z.string() }).optional(),
   nodes: z.array(NodeRecordSchema).default([]),
   steps: z.array(StepRecordSchema).default([]),
   rpcCalls: z.array(RpcRecordSchema).default([]),
@@ -63,6 +73,7 @@ export type RunLog = z.infer<typeof RunLogSchema>;
 export type RpcRecord = z.infer<typeof RpcRecordSchema>;
 export type StepRecord = z.infer<typeof StepRecordSchema>;
 export type ChannelSnapshot = z.infer<typeof ChannelSnapshotSchema>;
+export type StepCheck = z.infer<typeof CheckResultSchema>;
 export type NodeRecord = z.infer<typeof NodeRecordSchema>;
 export type RunStatus = z.infer<typeof RunStatusSchema>;
 
@@ -82,6 +93,8 @@ function serializeError(error: unknown): unknown {
 export interface StepHandle {
   update(result: unknown): void;
   end(result?: unknown, channels?: ChannelSnapshot[]): void;
+  /** Attach the step's expectation results. Allowed after `end`: checks run on the settled state. */
+  check(checks: StepCheck[]): void;
 }
 
 const FLUSH_INTERVAL_MS = 200;
@@ -114,6 +127,7 @@ export class RunLogStore {
     runId: string;
     scenario: string;
     network: string;
+    versions?: { fnn: string; ckb: string };
     nodes?: NodeRecord[];
   }): RunLogStore {
     return new RunLogStore(
@@ -121,6 +135,7 @@ export class RunLogStore {
         runId: params.runId,
         scenario: params.scenario,
         network: params.network,
+        versions: params.versions,
         status: "running",
         startedAt: new Date().toISOString(),
         nodes: params.nodes ?? [],
@@ -194,7 +209,18 @@ export class RunLogStore {
         step.endedAt = new Date().toISOString();
         this.#touch();
       },
+      check: (checks: StepCheck[]) => {
+        step.checks = checks;
+        this.#touch();
+      },
     };
+  }
+
+  checkLastStep(checks: StepCheck[]): void {
+    const step = this.#log.steps.at(-1);
+    if (step === undefined) throw new Error("no step to attach checks to");
+    step.checks = checks;
+    this.#touch();
   }
 
   addNode(node: NodeRecord): void {

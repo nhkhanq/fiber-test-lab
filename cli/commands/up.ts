@@ -3,6 +3,7 @@ import { loadConfig } from "../../lib/config";
 import { EXIT_CODES } from "../../lib/constants";
 import { CliError } from "../../lib/errors";
 import { runScenario } from "../../lib/scenario/run";
+import { describeMismatch } from "../../lib/scenario/verify";
 
 export function registerUpCommand(program: Command): void {
   program
@@ -18,7 +19,7 @@ export function registerUpCommand(program: Command): void {
 
       if (expectation && !expectation.match) {
         throw new CliError(
-          `Expectation mismatch: expected ${expectation.expected} but got ${expectation.actual}. Run ${up.runId} is still up — see \`fiber-lab logs ${up.runId}\`.`,
+          `Expectation mismatch:\n${describeMismatch(expectation).map((l) => `  - ${l}`).join("\n")}\nRun ${up.runId} is still up — see \`fiber-lab logs ${up.runId}\`.`,
           EXIT_CODES.expectation,
         );
       }

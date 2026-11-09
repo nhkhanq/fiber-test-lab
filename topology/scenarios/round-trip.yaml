@@ -1,5 +1,6 @@
 name: round-trip
 description: Bidirectional payments over one channel — Alice pays Bob, then Bob pays Alice back
+tags: [payment]
 nodes: [alice, bob]
 channels:
   - from: alice
@@ -10,9 +11,17 @@ seed:
     from: alice
     to: bob
     amount: 300
+    expect:
+      status: succeeded
+      balances:
+        - { node: alice, peer: bob, remote: 300, localDelta: -300 }
   - action: send_payment
     from: bob
     to: alice
     amount: 100
+    expect:
+      status: succeeded
+      balances:
+        - { node: alice, peer: bob, remote: 200, localDelta: 100 }
 expect:
   status: succeeded

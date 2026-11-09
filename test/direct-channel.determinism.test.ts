@@ -8,14 +8,15 @@ const SCENARIO = "direct-channel";
 const RUNS = 3;
 const PER_RUN_TIMEOUT_MS = 240_000;
 
+/** Only what the scenario produced: infrastructure steps carry run-ids and hashes by design. */
 function outcome(store: RunLogStore): unknown {
-  return store.data.steps.map((s) => {
-    if (s.action === "send_payment") {
+  return store.data.steps
+    .filter((s) => s.action === "send_payment" || s.action === "expect")
+    .map((s) => {
+      if (s.action !== "send_payment") return { action: s.action, result: s.result };
       const r = s.result as { status?: string; fee?: string; failed_error?: unknown };
-      return { action: s.action, status: r.status, fee: r.fee, failed_error: r.failed_error };
-    }
-    return { action: s.action, result: s.result };
-  });
+      return { action: s.action, status: r.status, fee: r.fee, failed_error: r.failed_error, checks: s.checks };
+    });
 }
 
 describe("direct-channel determinism", () => {

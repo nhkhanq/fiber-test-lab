@@ -15,10 +15,11 @@ tags: [yaml, zod, scenario, run-log, schema]
 ```yaml
 name: string                 # scenario identifier, matches the file name
 description: string          # short description, shown by `fiber-lab list`
+chain: { mining }            # optional; mining: manual (default) | auto
 nodes: string[]              # node names, e.g. [alice, bob, carol]
 channels: Channel[]          # channels opened as part of the seed
 seed: SeedStep[]             # actions run once the topology is ready
-expect: Expectation          # the expected outcome (used by test-kit + self-verification)
+expect: Expectation          # the expected outcome of the payments; optional if a step declares its own
 ```
 
 ### The `Channel` type
@@ -28,12 +29,11 @@ expect: Expectation          # the expected outcome (used by test-kit + self-ver
 | to | string | yes | The counterparty node (must be in `nodes`) |
 | capacity | number | yes | Capacity (CKB) node `from` locks into the channel |
 | asset | "CKB" \| "RUSD" | | Defaults to "CKB" |
-| push | number | | CKB pushed to `to` on open (creates inbound for `from`) |
 
 ### The `SeedStep` type
 | Field | Type | Description |
 |---|---|---|
-| action | "send_payment" \| "new_invoice" \| "wait" \| "kill_node" \| "start_node" | The action |
+| action | "send_payment" \| "new_invoice" \| "wait" \| "kill_node" \| "start_node" \| "mine" \| "advance_epochs" \| "assert" | The action |
 | from | string | The node performing it (for send_payment) |
 | to | string | The target node |
 | amount | number | The amount (send_payment/new_invoice) |
@@ -41,6 +41,28 @@ expect: Expectation          # the expected outcome (used by test-kit + self-ver
 | expiresInSec | number | For new_invoice — set a short expiry to test it |
 | node | string | For kill_node/start_node — the affected node |
 | durationSec | number | For wait — how long to wait |
+| useInvoice | boolean | For send_payment — pay the last invoice created by `to` instead of a keysend |
+| blocks | number | For mine — how many blocks (default 1) |
+| epochs | number | For advance_epochs — how many epochs |
+| expect | StepExpectation | What this step should have produced. Required on assert |
+
+### The `StepExpectation` type
+| Field | Type | Description |
+|---|---|---|
+| status | "succeeded" \| "failed" | send_payment only |
+| reason | ErrorCategory | send_payment only, requires status "failed" |
+| fee | AmountMatcher | send_payment only |
+| balances | BalanceCheck[] | Channel balances after the step |
+| channels | ChannelCheck[] | Channel states after the step |
+| invoices | InvoiceCheck[] | The status of each node's last invoice |
+| onchain | OnchainCheck[] | What each node's default lock owns on-chain |
+
+`AmountMatcher` is an exact number or `{ min?, max? }`, in CKB, or base units for a UDT.
+
+- **BalanceCheck:** `node`, optional `peer` (omitted: all the node's channels in that asset), `asset` (default "CKB"), and at least one of `local`, `remote`, `localDelta`, `remoteDelta`. Balances exclude the reserve. A delta compares with the state just before the step, so it is not valid on an assert step.
+- **ChannelCheck:** `node`, `peer`, `state` (an FNN state name, e.g. "ChannelReady").
+- **InvoiceCheck:** `node`, `status` ("Open", "Cancelled", "Expired", "Received", "Paid").
+- **OnchainCheck:** `node`, and at least one of `capacity`, `capacityDelta`.
 
 ### The `Expectation` type
 | Field | Type | Description |
@@ -78,6 +100,7 @@ Records an entire `fiber-lab up` run so it can be debugged after the containers 
 | startedAt | ISO8601 | When it started |
 | finishedAt | ISO8601 \| null | When it finished |
 | network | string | The Docker network name (flab_<run-id>) |
+| versions | { fnn, ckb }? | Optional (added in 1.2). The versions this run actually used; a result only holds for these |
 | nodes | NodeRecord[] | The node list + container names + temporary port maps (if any) |
 | steps | StepRecord[] | Each seed step: action, input, result |
 | rpcCalls | RpcRecord[] | Every outgoing RPC call: method, params, raw response/error |
@@ -101,6 +124,7 @@ Records an entire `fiber-lab up` run so it can be debugged after the containers 
 | input | object \| null | The step's input as declared in the scenario |
 | result | object \| null | The outcome |
 | at | ISO8601 | When the step ran |
+| checks | CheckResult[]? | Optional (added in 1.2). What the step's `expect` found: `{ check, expected, actual, match }` |
 | channels | ChannelSnapshot[]? | Optional (added 2026-09-22). Every node's view of its channels right after this step, so the run viewer can draw the topology directly instead of reverse-engineering it from `list_channels` responses scattered through `rpcCalls`. Only recorded for steps that change balances (open_channel, send_payment). |
 
 ### The `ChannelSnapshot` type
@@ -118,7 +142,12 @@ Records an entire `fiber-lab up` run so it can be debugged after the containers 
 
 ## 3. Validation rules (zod)
 
-- `channels[].from`/`to` must be within `nodes` — otherwise: a clear error, "node X is not declared in nodes".
+- Unknown keys are rejected at every level, so a misspelled field fails validation instead of being ignored.
+- `channels[].from`/`to`, and every node named in `seed` (including inside `expect`), must be within `nodes` — otherwise: a clear error, "node X is not declared in nodes".
+- Amounts must be exact in base units: at most 8 decimals for CKB, a whole number for a UDT.
+- A scenario must declare at least one expectation, and a top-level `expect` needs a `send_payment` to describe.
+- `status`, `reason` and `fee` on a step only apply to `send_payment`.
+- The node count must be within `maxNodesPerScenario` and the accounts funded in genesis; a node cannot be named "ckb".
 - `capacity` must be above the minimum reserve (99 CKB per side — see the glossary), or the channel will be rejected.
 - `expect.reason` may only be set when `expect.status === "failed"`.
 - The scenario's `name` should match its file name, to avoid confusion.

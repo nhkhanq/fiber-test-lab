@@ -1,5 +1,5 @@
 import { EXIT_CODES, type ExitCode } from "./constants";
-import { DockerError } from "./docker/orchestrator";
+import { DockerError } from "./docker/exec";
 import { ScenarioValidationError } from "./scenario/loader";
 
 export class CliError extends Error {
@@ -9,6 +9,13 @@ export class CliError extends Error {
   ) {
     super(message);
     this.name = "CliError";
+  }
+}
+
+export class RunFailedError extends CliError {
+  constructor(message: string, readonly runId: string) {
+    super(message, EXIT_CODES.runtime);
+    this.name = "RunFailedError";
   }
 }
 

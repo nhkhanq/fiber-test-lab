@@ -1,5 +1,6 @@
 name: insufficient-capacity
 description: Alice pays more than her channel outbound allows, payment fails
+tags: [failure, payment]
 nodes: [alice, bob]
 channels:
   - from: alice

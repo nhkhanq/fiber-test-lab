@@ -17,5 +17,5 @@
 
     "skipLibCheck": true
   },
-  "include": ["cli", "lib", "topology", "test-kit", "fiber-lab.config.ts"]
+  "include": ["cli", "lib", "topology", "test-kit", "test", "scripts", "fiber-lab.config.ts"]
 }

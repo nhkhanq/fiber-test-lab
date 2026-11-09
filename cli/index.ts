@@ -2,10 +2,12 @@
 import { Command } from "commander";
 import pkg from "../package.json" with { type: "json" };
 import { exitCodeFor } from "../lib/errors";
+import { registerImagesCommand } from "./commands/images";
 import { registerListCommand } from "./commands/list";
 import { registerLogsCommand } from "./commands/logs";
 import { registerResetCommand } from "./commands/reset";
 import { registerSeedCommand } from "./commands/seed";
+import { registerTestCommand } from "./commands/test";
 import { registerUiCommand } from "./commands/ui";
 import { registerUpCommand } from "./commands/up";
 
@@ -20,7 +22,9 @@ registerUpCommand(program);
 registerResetCommand(program);
 registerLogsCommand(program);
 registerSeedCommand(program);
+registerTestCommand(program);
 registerUiCommand(program);
+registerImagesCommand(program);
 
 program.parseAsync(process.argv).catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));
