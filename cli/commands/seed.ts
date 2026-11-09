@@ -2,16 +2,9 @@ import type { Command } from "commander";
 import { loadConfig } from "../../lib/config";
 import { EXIT_CODES } from "../../lib/constants";
 import { CliError } from "../../lib/errors";
-import { FiberClient } from "../../lib/fiber/client";
-import { RunLogStore, latestRunForScenario, type RunLog } from "../../lib/runlog/store";
+import { RunLogStore, latestRunForScenario } from "../../lib/runlog/store";
 import { loadScenario } from "../../lib/scenario/loader";
-import { runSeedSteps } from "../../lib/scenario/seeder";
-
-function endpointsOf(log: RunLog): Record<string, string> {
-  const endpoints: Record<string, string> = {};
-  for (const n of log.nodes) if (n.endpoint) endpoints[n.name] = n.endpoint;
-  return endpoints;
-}
+import { reseed } from "../../lib/scenario/seeder";
 
 export function registerSeedCommand(program: Command): void {
   program
@@ -38,12 +31,12 @@ export function registerSeedCommand(program: Command): void {
       }
 
       const store = await RunLogStore.resume(log.runId);
-      const client = new FiberClient({ endpoints: endpointsOf(log), logger: store.recordRpc });
 
       const before = store.data.steps.length;
       try {
-        await runSeedSteps(scenario, client, store, config, log.runId);
+        await reseed(scenario, store, config);
       } catch (error) {
+        if (error instanceof CliError) throw error;
         const message = error instanceof Error ? error.message : String(error);
         store.finish("failed", message);
         await store.save();

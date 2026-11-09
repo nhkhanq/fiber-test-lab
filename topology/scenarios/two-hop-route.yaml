@@ -1,5 +1,6 @@
 name: two-hop-route
 description: Alice pays Charlie routed through Bob (A-B-C, one intermediate hop)
+tags: [routing]
 nodes: [alice, bob, charlie]
 channels:
   - from: alice
@@ -13,6 +14,12 @@ seed:
     from: alice
     to: charlie
     amount: 100
+    expect:
+      status: succeeded
+      fee: 0.1
+      balances:
+        - { node: alice, peer: bob, localDelta: -100.1 }
+        - { node: charlie, peer: bob, localDelta: 100 }
 expect:
   status: succeeded
   routeHops: 1

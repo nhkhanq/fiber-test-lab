@@ -12,8 +12,8 @@ export function mapError(message: string): ErrorCategory | null {
 }
 
 export function classifyFailure(
-  result: { error?: unknown; peerConnected?: boolean } | null,
+  result: { error?: unknown; failed_error?: unknown; peerConnected?: boolean } | null,
 ): ErrorCategory | null {
   if (result?.peerConnected === false) return "peer_offline";
-  return mapError(String(result?.error ?? ""));
+  return mapError(String(result?.error ?? result?.failed_error ?? ""));
 }

@@ -1,10 +1,7 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
 import type { Command } from "commander";
 import { EXIT_CODES, RUNS_DIR } from "../../lib/constants";
 import { CliError } from "../../lib/errors";
-import { buildReportModel } from "../../lib/report/model";
-import { renderReport } from "../../lib/report/render";
+import { writeRunReport } from "../../lib/report/write";
 import { RunLogStore, type RunLog } from "../../lib/runlog/store";
 
 function printSummary(log: RunLog): void {
@@ -34,13 +31,6 @@ function printRpc(log: RunLog): void {
   }
 }
 
-async function writeHtml(log: RunLog, target: string | true): Promise<string> {
-  const path = typeof target === "string" ? target : join(RUNS_DIR, `${log.runId}.html`);
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, renderReport(buildReportModel(log)), "utf8");
-  return path;
-}
-
 export function registerLogsCommand(program: Command): void {
   program
     .command("logs <run-id>")
@@ -62,7 +52,7 @@ export function registerLogsCommand(program: Command): void {
       });
 
       if (opts.html !== undefined) {
-        const path = await writeHtml(log, opts.html);
+        const path = await writeRunReport(log, typeof opts.html === "string" ? opts.html : undefined);
         if (opts.json) console.log(JSON.stringify({ runId: log.runId, report: path }));
         else console.log(`Wrote ${path}`);
         return;

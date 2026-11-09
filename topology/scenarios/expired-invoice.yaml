@@ -1,5 +1,6 @@
 name: expired-invoice
 description: Alice pays Bob's invoice after it has expired, payment fails
+tags: [failure, invoice]
 nodes: [alice, bob]
 channels:
   - from: alice

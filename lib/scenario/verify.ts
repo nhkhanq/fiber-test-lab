@@ -1,4 +1,5 @@
 import type { StepRecord } from "../runlog/store";
+import type { CheckResult } from "./assertions";
 import { classifyFailure } from "./errorCategory";
 import type { Channel, ErrorCategory, Scenario } from "./schema";
 
@@ -14,12 +15,20 @@ export interface ReasonResult {
   match: boolean;
 }
 
+export interface FailedCheck {
+  step: number;
+  action: string;
+  check: CheckResult;
+}
+
 export interface ExpectationResult {
   match: boolean;
-  expected: "succeeded" | "failed";
-  actual: "succeeded" | "failed";
+  expected: "succeeded" | "failed" | null;
+  actual: "succeeded" | "failed" | null;
   routeHops?: RouteHopsResult;
   reason?: ReasonResult;
+  stepChecks: number;
+  failedChecks: FailedCheck[];
 }
 
 function hopsBetween(channels: Channel[], from: string, to: string): number | null {
@@ -44,41 +53,73 @@ function hopsBetween(channels: Channel[], from: string, to: string): number | nu
   return null;
 }
 
-function verifyRouteHops(scenario: Scenario, payments: StepRecord[], allSucceeded: boolean): RouteHopsResult {
-  const expected = scenario.expect.routeHops!;
-  const first = payments[0]!;
-  const input = first.input as { from?: string; to?: string } | null;
+function verifyRouteHops(expected: number, scenario: Scenario, payments: StepRecord[], allSucceeded: boolean): RouteHopsResult {
+  const first = payments[0];
+  const input = first?.input as { from?: string; to?: string } | null | undefined;
   const actual = input?.from && input?.to ? hopsBetween(scenario.channels, input.from, input.to) : null;
-  const fee = Number((first.result as { fee?: string } | null)?.fee ?? "0");
+  const fee = Number((first?.result as { fee?: string } | null | undefined)?.fee ?? "0");
   const feeConsistent = allSucceeded ? expected >= 1 === fee > 0 : true;
   return { expected, actual, match: actual === expected && feeConsistent };
 }
 
-function verifyReason(scenario: Scenario, payments: StepRecord[]): ReasonResult {
-  const expected = scenario.expect.reason!;
+function verifyReason(expected: ErrorCategory, payments: StepRecord[]): ReasonResult {
   const failed = payments.find((p) => (p.result as { status?: string } | null)?.status !== "Success");
-  const actual = classifyFailure(failed?.result as { error?: unknown; peerConnected?: boolean } | null);
+  const actual = classifyFailure(failed?.result as Parameters<typeof classifyFailure>[0]);
   return { expected, actual, match: actual === expected };
 }
 
 export function verifyExpectation(scenario: Scenario, steps: StepRecord[]): ExpectationResult | null {
+  const checked = steps.flatMap((step, index) =>
+    (step.checks ?? []).map((check) => ({ step: index, action: step.action, check })),
+  );
+  const failedChecks = checked.filter((c) => !c.check.match);
+  const expect = scenario.expect;
+  if (expect === undefined && checked.length === 0) return null;
+
+  const result: ExpectationResult = {
+    match: failedChecks.length === 0,
+    expected: expect?.status ?? null,
+    actual: null,
+    stepChecks: checked.length,
+    failedChecks,
+  };
+  if (expect === undefined) return result;
+
   const payments = steps.filter((s) => s.action === "send_payment");
-  if (payments.length === 0) return null;
+  if (payments.length === 0) {
+    result.match = false;
+    return result;
+  }
 
   const allSucceeded = payments.every((p) => (p.result as { status?: string } | null)?.status === "Success");
-  const actual = allSucceeded ? "succeeded" : "failed";
-  const statusMatch = actual === scenario.expect.status;
+  result.actual = allSucceeded ? "succeeded" : "failed";
+  result.match &&= result.actual === expect.status;
 
-  const result: ExpectationResult = { match: statusMatch, expected: scenario.expect.status, actual };
-
-  if (scenario.expect.routeHops !== undefined) {
-    result.routeHops = verifyRouteHops(scenario, payments, allSucceeded);
+  if (expect.routeHops !== undefined) {
+    result.routeHops = verifyRouteHops(expect.routeHops, scenario, payments, allSucceeded);
     result.match &&= result.routeHops.match;
   }
-  if (scenario.expect.reason !== undefined) {
-    result.reason = verifyReason(scenario, payments);
+  if (expect.reason !== undefined) {
+    result.reason = verifyReason(expect.reason, payments);
     result.match &&= result.reason.match;
   }
 
   return result;
+}
+
+export function describeMismatch(result: ExpectationResult): string[] {
+  const lines: string[] = [];
+  if (result.expected !== null && result.expected !== result.actual) {
+    lines.push(`scenario: expected ${result.expected} but got ${result.actual ?? "no payment"}`);
+  }
+  if (result.reason && !result.reason.match) {
+    lines.push(`scenario: expected reason ${result.reason.expected} but got ${result.reason.actual ?? "unknown"}`);
+  }
+  if (result.routeHops && !result.routeHops.match) {
+    lines.push(`scenario: expected ${result.routeHops.expected} route hop(s) but got ${result.routeHops.actual ?? "no route"}`);
+  }
+  for (const failed of result.failedChecks) {
+    lines.push(`steps[${failed.step}] ${failed.action}: ${failed.check.check} expected ${failed.check.expected} but got ${failed.check.actual}`);
+  }
+  return lines;
 }

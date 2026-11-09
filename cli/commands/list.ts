@@ -18,7 +18,8 @@ export function registerListCommand(program: Command): void {
       console.log("Scenarios:");
       if (scenarios.length === 0) console.log("  (none)");
       for (const s of scenarios) {
-        const label = s.valid ? s.description || "(no description)" : `INVALID — ${s.error}`;
+        const tags = s.tags.length > 0 ? ` [${s.tags.join(", ")}]` : "";
+        const label = s.valid ? `${s.description || "(no description)"}${tags}` : `INVALID — ${s.error}`;
         console.log(`  ${s.name.padEnd(24)} ${label}`);
       }
 

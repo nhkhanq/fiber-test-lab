@@ -1,8 +1,16 @@
+import type { z } from "zod";
 import { loadConfig } from "../lib/config";
 import { MIN_CHANNEL_RESERVE_CKB, SHANNON_PER_CKB } from "../lib/constants";
 import { runLogPath } from "../lib/runlog/store";
+import { evaluatePayment, type CheckResult, type PaymentResult } from "../lib/scenario/assertions";
 import { classifyFailure, mapError } from "../lib/scenario/errorCategory";
-import type { ErrorCategory } from "../lib/scenario/schema";
+import {
+  BalanceCheckSchema,
+  type AmountMatcher,
+  type Asset,
+  type ErrorCategory,
+  type InvoiceStatus,
+} from "../lib/scenario/schema";
 import type { ScenarioContext } from "./context";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -71,6 +79,50 @@ async function assertReason(ctx: ScenarioContext, actual: ErrorCategory | null, 
   if (actual !== reason) {
     await fail(ctx, `expectPaymentFails: reason "${actual ?? "unknown"}" != expected "${reason}"`);
   }
+}
+
+async function assertChecks(ctx: ScenarioContext, name: string, checks: CheckResult[]): Promise<void> {
+  const failed = checks.filter((c) => !c.match);
+  if (failed.length === 0) return;
+  await fail(ctx, `${name}: ${failed.map((c) => `${c.check} expected ${c.expected} but got ${c.actual}`).join("; ")}`);
+}
+
+export async function expectBalance(ctx: ScenarioContext, check: z.input<typeof BalanceCheckSchema>): Promise<void> {
+  const parsed = BalanceCheckSchema.parse(check);
+  await assertChecks(ctx, "expectBalance", await ctx.runtime.checkState({ balances: [parsed] }));
+}
+
+export async function expectOnchainCapacity(ctx: ScenarioContext, node: string, capacity: AmountMatcher): Promise<void> {
+  await assertChecks(ctx, "expectOnchainCapacity", await ctx.runtime.checkState({ onchain: [{ node, capacity }] }));
+}
+
+export async function expectFee(
+  ctx: ScenarioContext,
+  fee: AmountMatcher,
+  paymentId: string | null = ctx.lastPaymentId,
+): Promise<void> {
+  if (!paymentId) await fail(ctx, `expectFee: no payment to check (run ${ctx.runId})`);
+  const step = ctx.store.data.steps.find(
+    (s) => s.action === "send_payment" && (s.result as { payment_hash?: string } | null)?.payment_hash === paymentId,
+  );
+  const asset = (step?.input as { asset?: Asset } | null)?.asset ?? "CKB";
+  const payment = await pollPayment(ctx, payerFor(ctx, paymentId!), paymentId!);
+  await assertChecks(ctx, "expectFee", evaluatePayment({ fee }, payment as PaymentResult, asset));
+}
+
+export async function expectInvoiceStatus(
+  ctx: ScenarioContext,
+  invoice: { node: string; paymentHash: string },
+  status: InvoiceStatus,
+): Promise<void> {
+  const config = loadConfig();
+  const deadline = Date.now() + config.pollTimeoutMs;
+  let actual = await ctx.runtime.invoiceStatus(invoice.node, invoice.paymentHash);
+  while (actual !== status && Date.now() < deadline) {
+    await sleep(config.pollIntervalMs);
+    actual = await ctx.runtime.invoiceStatus(invoice.node, invoice.paymentHash);
+  }
+  if (actual !== status) await fail(ctx, `expectInvoiceStatus: status "${actual}" != expected "${status}"`);
 }
 
 export interface ChannelStateExpectation {
