@@ -15,7 +15,6 @@ export type ExitCode = (typeof EXIT_CODES)[keyof typeof EXIT_CODES];
 export const SHANNON_PER_CKB = 100_000_000n;
 
 export const MIN_CHANNEL_CAPACITY_CKB = 100;
-export const MIN_CHANNEL_RESERVE_CKB = 99;
 
 export const RUNS_DIR = ".fiber-lab/runs";
 export const WORK_DIR = ".fiber-lab/work"; // compose files are materialized per run-id

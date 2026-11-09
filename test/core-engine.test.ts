@@ -127,11 +127,12 @@ describe("programmatic test-kit", () => {
     "drives a run from code: channels, payments, invoices, assertions",
     async () => {
       await withScenario({ name: "programmatic", ...pair, seed: [noopExpect] }, async (ctx) => {
+        const opened = await ctx.balances("alice", { peer: "bob" });
         const direct = await ctx.pay("alice", "bob", 50);
         expect(direct.succeeded).toBe(true);
         await expectPaymentSucceeds(ctx);
         await expectFee(ctx, 0);
-        await expectBalance(ctx, { node: "alice", peer: "bob", local: 351, remote: 50 });
+        await expectBalance(ctx, { node: "alice", peer: "bob", local: Number(opened.local) / 1e8 - 50, remote: 50 });
         await expectBalance(ctx, { node: "bob", local: { min: 49, max: 51 } });
 
         const invoice = await ctx.newInvoice("bob", 25);

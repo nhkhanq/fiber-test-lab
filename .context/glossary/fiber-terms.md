@@ -33,7 +33,7 @@ A direct relationship between two nodes. Opening it = locking CKB on-chain into 
 Channel capacity is split by DIRECTION, not a single number:
 - **Outbound** = what can be SENT
 - **Inbound** = what can be RECEIVED
-Each payment decreases outbound / increases inbound on the payer's side. Each side reserves a minimum of **99 CKB** (not usable for payments).
+Each payment decreases outbound / increases inbound on the payer's side. Each side reserves a minimum of **99 CKB** on FNN 0.9 and **100 CKB** on 0.10 (not usable for payments).
 
 ## HTLC (Hash Time-Locked Contract)
 The security mechanism for multi-hop payments: either every hop succeeds, or all of them revert.

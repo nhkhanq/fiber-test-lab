@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project status: implemented (v1.1.0)
+## Project status: implemented
 
 The CLI, the scenario engine, the test-kit and the run viewer are all built and working. The
 commands below are real — run them. `.context/` remains the spec; where code and spec disagree,
@@ -57,6 +57,7 @@ Two-tier config: per-scenario settings live in each `scenarios/<name>.yaml`; glo
   - `npm run test:consumer` — installs the packed library into an empty project and uses it as an outsider would. No Docker.
   - `npm run lab -- test --all` — every YAML scenario end to end.
 - **Pinned versions matter**: the FNN binary and `@ckb-ccc/fiber` are version-pinned (in `package.json` and `docs/scenario-catalog.md`); verify results are only valid for the pinned versions.
+- **Every package release pins one FNN release** (BR-DET-003); `npm run release:set -- <version> <fnn>` changes both together. `docs/releasing.md` has the rule and the release steps; pushing a `v*` tag publishes to npm.
 
 ## Non-negotiable invariants (from business-rules)
 

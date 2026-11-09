@@ -122,7 +122,7 @@ export function registerControlCommands(program: Command): void {
     .description("Check that this machine can run the lab")
     .option("--json", "Print JSON")
     .action(async (opts: { json?: boolean }) => {
-      const checks = await runDoctor();
+      const checks = await runDoctor(loadConfig().fnnVersion);
       if (opts.json) console.log(JSON.stringify({ platform: `${process.platform}/${process.arch}`, checks }, null, 2));
       else {
         console.log(`platform        ${process.platform}/${process.arch}`);

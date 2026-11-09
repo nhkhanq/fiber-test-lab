@@ -24,13 +24,14 @@ async function firstLine(args: string[]): Promise<{ ok: boolean; line: string }>
   }
 }
 
-export async function runDoctor(): Promise<DoctorCheck[]> {
+export async function runDoctor(fnnVersion: string): Promise<DoctorCheck[]> {
   const daemon = await firstLine(["version", "--format", "{{.Server.Version}} {{.Server.Os}}/{{.Server.Arch}}"]);
   const compose = await firstLine(["compose", "version", "--short"]);
   return [
     checkNode(),
     { name: "docker", ok: daemon.ok, detail: daemon.ok ? daemon.line : `not reachable: ${daemon.line}` },
     { name: "docker compose", ok: compose.ok, detail: compose.ok ? compose.line : `not available: ${compose.line}` },
+    { name: "fnn", ok: true, detail: fnnVersion },
   ];
 }
 

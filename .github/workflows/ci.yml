@@ -38,7 +38,7 @@ jobs:
         include:
           - fnn: "0.9.1"
             experimental: false
-          - fnn: "0.10.0-rc1"
+          - fnn: "0.10.0-rc2"
             experimental: true
     steps:
       - uses: actions/checkout@v4
@@ -88,7 +88,7 @@ jobs:
         include:
           - fnn: "0.9.1"
             experimental: false
-          - fnn: "0.10.0-rc1"
+          - fnn: "0.10.0-rc2"
             experimental: true
     steps:
       - uses: actions/checkout@v4
@@ -101,16 +101,28 @@ jobs:
   test-kit:
     needs: images
     runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - fnn: "0.9.1"
+            experimental: false
+          - fnn: "0.10.0-rc2"
+            experimental: true
     steps:
       - uses: actions/checkout@v4
       - uses: ./
         with:
+          fnn-version: ${{ matrix.fnn }}
           prepare-only: "true"
       - run: npm run test:integration
+        env:
+          FIBER_LAB_FNN_VERSION: ${{ matrix.fnn }}
       - name: Upload run-logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-kit-run-logs
+          name: test-kit-run-logs-${{ matrix.fnn }}
           path: .fiber-lab/runs/
           if-no-files-found: ignore

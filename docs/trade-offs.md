@@ -33,7 +33,7 @@ Fiber Test Lab đánh đổi có chủ đích để đạt mục tiêu chính: *
 
 ## Kênh single-funded
 
-- Chỉ bên `from` cấp vốn kênh. `capacity` verify = `local + remote balance + 1 reserve (99 CKB)`. Kênh do hai bên cùng cấp vốn sẽ cần công thức khác.
+- Chỉ bên `from` cấp vốn kênh. `capacity` verify = `local + remote balance + 1 reserve` do node báo (99 CKB trên FNN 0.9, 100 CKB trên 0.10). Kênh do hai bên cùng cấp vốn sẽ cần công thức khác.
 
 ## Chi phí thời gian
 

@@ -236,7 +236,28 @@ describe("renderReport", () => {
   });
 });
 
+describe("the versions a run used", () => {
+  it("are named in the report, since a result only holds for them", () => {
+    const html = renderReport(buildReportModel(runLog({ versions: { fnn: "0.10.0-rc2", ckb: "0.207.0" } })));
+    expect(html).toContain("FNN 0.10.0-rc2");
+    expect(html).toContain("CKB 0.207.0");
+  });
+
+  it("are left out of a report for a run-log that did not record them", () => {
+    expect(renderReport(buildReportModel(runLog()))).not.toContain("· FNN ");
+  });
+});
+
 describe("topology rendering", () => {
+  it("shrinks a long node name to fit its circle", () => {
+    const log = runLog();
+    log.nodes = log.nodes.map((node) => (node.name === "alice" ? { ...node, name: "organizer" } : node));
+    const html = renderReport(buildReportModel(log));
+    const sizeOf = (name: string): number => Number(new RegExp(`font-size:([\\d.]+)px">${name}<`).exec(html)?.[1]);
+    expect(sizeOf("bob")).toBe(13);
+    expect(sizeOf("organizer")).toBeLessThan(9);
+  });
+
   it("gives every node its own colour and paints each balance in its holder's colour", () => {
     const html = renderReport(buildReportModel(runLog()));
     // One CSS variable per node, and the edge segments reference them rather than raw hex.
@@ -295,7 +316,8 @@ describe("ui server", () => {
     } finally {
       await server.close();
     }
-  });
+    // The index reads every run-log in the working directory, and a developer's can be large.
+  }, 60_000);
 });
 
 describe("renderRunList", () => {

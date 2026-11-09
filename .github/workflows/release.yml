@@ -1,0 +1,115 @@
+name: Release
+
+# Pushing a tag such as v0.9.1 publishes that commit to npm once every check has passed against the
+# FNN release it pins. A plain version goes to `latest` and one with a suffix to `next`, the same way
+# Fiber publishes fiber-js.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      dist_tag: ${{ steps.release.outputs.dist_tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - id: release
+        run: npx tsx scripts/release-check.ts "$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+      - run: npm run typecheck
+      - run: npm run test:unit
+      - run: npm run test:consumer
+
+  # One job fetches the FNN release; the rest load it from the cache.
+  images:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          prepare-only: "true"
+
+  scenarios:
+    needs: images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          all: "true"
+
+  test-kit:
+    needs: images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          prepare-only: "true"
+      - run: npm run test:integration
+
+  publish:
+    needs: [check, scenarios, test-kit]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      # npm trusted publishing needs npm 11.5.1 or later, which comes with Node 24.
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - run: npm ci
+      - name: Publish
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+          DIST_TAG: ${{ needs.check.outputs.dist_tag }}
+        run: |
+          if npm view "fiber-test-lab@$VERSION" version 2>/dev/null | grep -q .; then
+            echo "fiber-test-lab@$VERSION is already on npm."
+          else
+            npm publish --access public --tag "$DIST_TAG"
+          fi
+
+  # GitHub's registry only takes a name scoped to the owner, and this is what fills the repository's
+  # Packages list. npmjs stays the place to install from: GitHub asks for a token even to read.
+  publish-github:
+    needs: [check, scenarios, test-kit]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://npm.pkg.github.com
+          scope: "@nhkhanq"
+          package-manager-cache: false
+      - run: npm ci
+      - name: Publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.check.outputs.version }}
+          DIST_TAG: ${{ needs.check.outputs.dist_tag }}
+        run: |
+          npm pkg set name=@nhkhanq/fiber-test-lab
+          if npm view "@nhkhanq/fiber-test-lab@$VERSION" version 2>/dev/null | grep -q .; then
+            echo "@nhkhanq/fiber-test-lab@$VERSION is already on GitHub Packages."
+          else
+            npm publish --tag "$DIST_TAG"
+          fi

@@ -1,6 +1,6 @@
 import type { z } from "zod";
 import { loadConfig } from "../lib/config";
-import { MIN_CHANNEL_RESERVE_CKB, SHANNON_PER_CKB } from "../lib/constants";
+import { SHANNON_PER_CKB } from "../lib/constants";
 import { runLogPath } from "../lib/runlog/store";
 import { evaluatePayment, type CheckResult, type PaymentResult } from "../lib/scenario/assertions";
 import { classifyFailure, mapError } from "../lib/scenario/errorCategory";
@@ -165,8 +165,11 @@ export async function expectChannelState(
     await fail(ctx, `expectChannelState: state "${channel!.state.state_name}" != expected "${expected.status}"`);
   }
   if (expected.capacity !== undefined) {
-    const balances = BigInt(channel!.local_balance) + BigInt(channel!.remote_balance);
-    const capacity = Number(balances / SHANNON_PER_CKB) + MIN_CHANNEL_RESERVE_CKB;
+    // FNN does not report a channel's capacity, and its balances exclude the reserve, which the
+    // node states because it differs between releases.
+    const info = (await ctx.call(ctx.scenario.nodes[0]!, "node_info")) as { auto_accept_channel_ckb_funding_amount: string };
+    const total = BigInt(channel!.local_balance) + BigInt(channel!.remote_balance) + BigInt(info.auto_accept_channel_ckb_funding_amount);
+    const capacity = Number(total / SHANNON_PER_CKB);
     if (capacity !== expected.capacity) {
       await fail(ctx, `expectChannelState: capacity ${capacity} CKB != expected ${expected.capacity} CKB`);
     }

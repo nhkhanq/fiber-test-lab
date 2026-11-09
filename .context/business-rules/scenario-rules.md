@@ -14,7 +14,7 @@ tags: [scenario, polling, isolation, cleanup]
 
 **BR-SCN-002:** `channels[].from`/`to` must be within `nodes`. A violation -> a validation error.
 
-**BR-SCN-003:** Each channel's `capacity` must be above the minimum reserve (99 CKB per side) unless the scenario is DELIBERATELY testing a reserve failure — in which case `expect.reason` must reflect that.
+**BR-SCN-003:** Each channel's `capacity` must be above the minimum reserve (99 CKB per side on FNN 0.9, 100 on 0.10) unless the scenario is DELIBERATELY testing a reserve failure — in which case `expect.reason` must reflect that.
 
 **BR-SCN-004:** `expect.reason` is only valid when `expect.status === "failed"`.
 
@@ -73,3 +73,5 @@ tags: [scenario, polling, isolation, cleanup]
 **BR-DET-001:** The same scenario + the same FNN/offckb version must produce the same `expect` result. If it is flaky (passes sometimes, fails other times) -> treat it as a Test Lab bug (usually a missing wait for READY), not as acceptable behavior.
 
 **BR-DET-002:** The FNN binary version + `@ckb-ccc/fiber` version must be pinned. A verified result is only considered valid for the version recorded in `scenario-catalog.md`. The run-log records the versions each run used.
+
+**BR-DET-003:** Every package release pins one FNN release. A stable package pins a stable FNN and is published to `latest`. A release candidate `x.y.z-rc.N` pins the FNN release candidate of the same number and is published to `next`. Details: `docs/releasing.md`.

@@ -24,7 +24,7 @@ export const ChannelSchema = z.strictObject({
     .number()
     .positive()
     .refine((c) => c >= MIN_CHANNEL_CAPACITY_CKB, {
-      message: `capacity must be >= ${MIN_CHANNEL_CAPACITY_CKB} CKB (the node's minimum funding amount; each side reserves ~99 CKB)`,
+      message: `capacity must be >= ${MIN_CHANNEL_CAPACITY_CKB} CKB (the node's minimum funding amount; each side reserves about 100 CKB)`,
     }),
   asset: AssetSchema.default("CKB"),
 });

@@ -165,6 +165,6 @@ Records an entire `fiber-lab up` run so it can be debugged after the containers 
 - `status: inflight` requires `waitFor: inflight`, and `status: timeout` rules it out.
 - A top-level `expect` describes finished payments, so a seed that leaves one in flight must declare `expect` on its steps.
 - The node count must be within `maxNodesPerScenario` and the accounts funded in genesis; a node cannot be named "ckb".
-- `capacity` must be above the minimum reserve (99 CKB per side — see the glossary), or the channel will be rejected.
+- `capacity` must be above the minimum reserve (99 CKB per side on FNN 0.9, 100 on 0.10 — see the glossary), or the channel will be rejected.
 - `expect.reason` may only be set when `expect.status === "failed"`.
 - The scenario's `name` should match its file name, to avoid confusion.

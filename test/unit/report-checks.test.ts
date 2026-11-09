@@ -46,7 +46,7 @@ describe("the viewer and step checks", () => {
       "manual mining",
       "2 epoch(s), tip 30",
       "1/2 checks passed — payment fee: expected 5 CKB, got 0 CKB",
-      "1 containers started",
+      "1 container started",
     ]);
   });
 
@@ -54,10 +54,50 @@ describe("the viewer and step checks", () => {
     const model = modelOf([{ action: "expect", result: { match: true, expected: null, actual: null, stepChecks: 3, failedChecks: [] } }]);
     expect(model.steps[0]?.summary).toBe("3/3 step checks");
     expect(model.summary.verdict).toBe("match");
+    expect(model.summary.expected).toBe("3 step checks");
+  });
+
+  it("counts what passed when a step expectation does not hold", () => {
+    const { summary } = modelOf([
+      { action: "expect", result: { match: false, expected: null, actual: null, stepChecks: 3, failedChecks: [{ step: 1 }] } },
+    ]);
+    expect(summary.verdict).toBe("mismatch");
+    expect(summary.actual).toBe("2 passed");
   });
 
   it("still reads a run-log from before step checks existed", () => {
     const [step] = modelOf([{ action: "docker_up", input: { services: ["ckb"] }, result: { imagesBuilt: 2, containersStarted: 1 } }]).steps;
-    expect(step?.summary).toBe("2 images built, 1 containers started");
+    expect(step?.summary).toBe("2 images built, 1 container started");
+  });
+
+  it("shows a channel as closed as soon as one side has closed it", () => {
+    const side = (node: string, peer: string, state: string) => ({ node, peer, channelId: "0x1", state, asset: "CKB", localBalance: "1", remoteBalance: "2" });
+    const { edges } = modelOf([{ action: "close_channel", channels: [side("alice", "bob", "Closed"), side("bob", "alice", "ChannelReady")] }]);
+    expect(edges[0]?.state).toBe("Closed");
+  });
+
+  const refused = { error: "RPC settle_invoice failed: Invoice is still open" };
+
+  it("does not flag a refusal the scenario asked for, and says what the node refused", () => {
+    const check = { check: "settle_invoice error", expected: "still open", actual: refused.error, match: true };
+    const [step] = modelOf([{ action: "settle_invoice", input: { node: "organizer" }, result: refused, checks: [check] }]).steps;
+    expect(step?.ok).toBe(true);
+    expect(step?.summary).toBe("organizer — refused: Invoice is still open");
+  });
+
+  it("flags a refusal nothing asked for", () => {
+    const [step] = modelOf([{ action: "settle_invoice", input: { node: "organizer" }, result: refused }]).steps;
+    expect(step?.ok).toBe(false);
+  });
+
+  it("does not flag a payment expected to fail", () => {
+    const check = { check: "payment status", expected: "failed", actual: "failed", match: true };
+    const [step] = modelOf([{ action: "send_payment", input: { from: "a", to: "b", amount: 1 }, result: { error: "no path" }, checks: [check] }]).steps;
+    expect(step?.ok).toBe(true);
+  });
+
+  it("flags a payment that failed when the check on it was about something else", () => {
+    const [step] = modelOf([{ action: "send_payment", input: { from: "a", to: "b", amount: 1 }, result: { error: "no path" }, checks: [passed] }]).steps;
+    expect(step?.ok).toBe(false);
   });
 });
