@@ -8,7 +8,7 @@ import { parse as parseToml } from "./toml";
 import { CkbChain, parseGenesis } from "../../lib/ckb/chain";
 import { GlobalConfigSchema } from "../../lib/config";
 import { DEV_FUNDED_KEYS, GENESIS_SIMPLE_UDT_INDEX, PACKAGE_ROOT } from "../../lib/constants";
-import { contextDigest, imageTags, isLabImage } from "../../lib/docker/images";
+import { buildFailureCause, contextDigest, imageTags, isLabImage } from "../../lib/docker/images";
 import { FiberClient } from "../../lib/fiber/client";
 import { jsonRpcCall, type RpcCallRecord } from "../../lib/fiber/jsonRpc";
 import { nodeConfigYaml } from "../../lib/fiber/nodeConfig";
@@ -223,6 +223,29 @@ describe("images and compose", () => {
     expect(isLabImage("flab_mw8nyzoid49873-alice:latest", "flab")).toBe(true);
     expect(isLabImage("redis:7-alpine", "flab")).toBe(false);
     expect(isLabImage("flabbergasted:latest", "flab")).toBe(false);
+  });
+
+  it("reports why a build failed, not the Dockerfile it echoes afterwards", () => {
+    const output = [
+      "#7 [3/6] RUN curl https://example/fnn.tar.gz",
+      "#7 ERROR: process did not complete successfully: exit code: 22",
+      "------",
+      " > [3/6] RUN curl https://example/fnn.tar.gz:",
+      "0.318 curl: (22) The requested URL returned error: 504",
+      "------",
+      "fnn.Dockerfile:12",
+      "--------------------",
+      "  12 | >>> RUN curl https://example/fnn.tar.gz",
+      "--------------------",
+      "ERROR: failed to build: failed to solve",
+    ].join("\r\n");
+    const cause = buildFailureCause(output);
+    expect(cause).toContain("curl: (22) The requested URL returned error: 504");
+    expect(cause).not.toContain("failed to solve");
+  });
+
+  it("falls back to the end of the output when there is no failing step to quote", () => {
+    expect(buildFailureCause("one\ntwo\nCannot connect to the Docker daemon")).toContain("Cannot connect");
   });
 
   it("digests the build context, so a changed file means a new tag", async () => {

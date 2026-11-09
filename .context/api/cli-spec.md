@@ -48,6 +48,9 @@ Run scenarios one at a time, tear each one down, and report the results.
 - `--keep` — keep the containers of a scenario that does not pass.
 - **Exit code:** `0` all passed, `3` at least one mismatch, `2` at least one could not run (takes priority), `1` nothing valid was selected.
 
+### `fiber-lab images [--json]`
+Build or pull the images for the configured versions without starting anything. `--json` prints their names.
+
 ### `fiber-lab logs <run-id> [--json] [--rpc] [--html [path]]`
 Print the run-log.
 - Default: a summary of steps + status.

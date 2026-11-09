@@ -9,7 +9,7 @@ RUN apt-get -o Acquire::Retries=5 update \
     && rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /fiber-scripts \
     && for c in auth funding-lock commitment-lock simple_udt xudt_rce always_success; do \
-         curl -fsSL --retry 8 --retry-delay 5 \
+         curl -fsSL --retry 30 --retry-delay 10 --retry-all-errors \
               -o "/fiber-scripts/$c" "${FIBER_CONTRACTS_URL}/$c" \
          && sleep 3; \
        done
