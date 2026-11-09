@@ -52,10 +52,11 @@ describe("hold invoices from code", () => {
         expect(invoice).toMatchObject({ hold: true, node: "organizer" });
         expect(await ctx.settleInvoice(invoice)).toMatchObject({ ok: false, error: expect.stringMatching(/still open/i) });
 
+        const opened = await ctx.balances("member", { peer: "hub" });
         const locked = await ctx.payInvoice("member", invoice, { waitFor: "inflight" });
         expect(locked).toMatchObject({ state: "inflight", succeeded: false, status: "Inflight", reason: null });
         await expectInvoiceStatus(ctx, invoice, "Received");
-        await expectBalance(ctx, { node: "member", peer: "hub", local: 901, offered: 10.01 });
+        await expectBalance(ctx, { node: "member", peer: "hub", local: Number(opened.local) / 1e8, offered: 10.01 });
         expect((await ctx.balances("organizer")).received).toBe(1_000_000_000n);
 
         const wrong = await ctx.settleInvoice(invoice, { preimage: `0x${"22".repeat(32)}` });
