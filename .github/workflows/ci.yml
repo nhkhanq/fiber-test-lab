@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [canary, main]
+  push:
+    branches: [canary, main]
+  schedule:
+    - cron: "0 3 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test:unit
+
+  scenarios:
+    needs: unit
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - fnn: "0.9.1"
+            experimental: false
+          - fnn: "0.10.0-rc1"
+            experimental: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          all: "true"
+          fnn-version: ${{ matrix.fnn }}
+          artifact-name: fiber-lab-results-${{ matrix.fnn }}
+
+  test-kit:
+    needs: unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run test:integration
+      - name: Upload run-logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-kit-run-logs
+          path: .fiber-lab/runs/
+          if-no-files-found: ignore

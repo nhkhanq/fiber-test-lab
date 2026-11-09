@@ -6,6 +6,7 @@ import { registerListCommand } from "./commands/list";
 import { registerLogsCommand } from "./commands/logs";
 import { registerResetCommand } from "./commands/reset";
 import { registerSeedCommand } from "./commands/seed";
+import { registerTestCommand } from "./commands/test";
 import { registerUiCommand } from "./commands/ui";
 import { registerUpCommand } from "./commands/up";
 
@@ -20,6 +21,7 @@ registerUpCommand(program);
 registerResetCommand(program);
 registerLogsCommand(program);
 registerSeedCommand(program);
+registerTestCommand(program);
 registerUiCommand(program);
 
 program.parseAsync(process.argv).catch((error) => {

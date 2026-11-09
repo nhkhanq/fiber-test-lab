@@ -48,7 +48,9 @@
     "lab": "tsx cli/index.ts",
     "ui": "tsx cli/index.ts ui --open",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:unit": "vitest run test/unit/ test/report.test.ts test/shebang.test.ts",
+    "test:integration": "vitest run test/ test-kit/examples/ --exclude \"test/unit/**\" --exclude test/report.test.ts --exclude test/shebang.test.ts"
   },
   "dependencies": {
     "@ckb-ccc/core": "0.0.0-canary-20260330023358",

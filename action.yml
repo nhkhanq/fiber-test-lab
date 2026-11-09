@@ -1,0 +1,72 @@
+name: Fiber Test Lab
+description: Run Fiber Network payment and routing scenarios against real FNN nodes on a local CKB devnet.
+branding:
+  icon: zap
+  color: blue
+
+inputs:
+  scenarios:
+    description: Space-separated scenario names or paths to YAML files.
+    default: ""
+  tags:
+    description: Space-separated tags; runs the built-in scenarios carrying any of them.
+    default: ""
+  all:
+    description: Run every built-in scenario.
+    default: "false"
+  fnn-version:
+    description: FNN release to test against, e.g. 0.9.1. Defaults to the version pinned by this action's release.
+    default: ""
+  image-registry:
+    description: Pull prebuilt lab images from this registry, falling back to a local build.
+    default: ""
+  artifact-name:
+    description: Name of the uploaded artifact holding the run-logs, HTML reports and JUnit file.
+    default: fiber-lab-results
+
+outputs:
+  junit:
+    description: Path of the JUnit report.
+    value: ${{ steps.run.outputs.junit }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 20
+
+    - name: Install Fiber Test Lab
+      shell: bash
+      run: npm ci --prefix "$GITHUB_ACTION_PATH"
+
+    - name: Run scenarios
+      id: run
+      shell: bash
+      env:
+        INPUT_SCENARIOS: ${{ inputs.scenarios }}
+        INPUT_TAGS: ${{ inputs.tags }}
+        INPUT_ALL: ${{ inputs.all }}
+        FIBER_LAB_FNN_VERSION: ${{ inputs.fnn-version }}
+        FIBER_LAB_IMAGE_REGISTRY: ${{ inputs.image-registry }}
+      run: |
+        args=(--junit .fiber-lab/junit.xml --html)
+        read -r -a scenarios <<< "$INPUT_SCENARIOS"
+        args+=("${scenarios[@]}")
+        if [ "$INPUT_ALL" = "true" ]; then args+=(--all); fi
+        if [ -n "$INPUT_TAGS" ]; then
+          read -r -a tags <<< "$INPUT_TAGS"
+          args+=(--tag "${tags[@]}")
+        fi
+        echo "junit=.fiber-lab/junit.xml" >> "$GITHUB_OUTPUT"
+        "$GITHUB_ACTION_PATH/node_modules/.bin/tsx" "$GITHUB_ACTION_PATH/cli/index.ts" test "${args[@]}"
+
+    - name: Upload results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: |
+          .fiber-lab/runs/
+          .fiber-lab/junit.xml
+        if-no-files-found: ignore
