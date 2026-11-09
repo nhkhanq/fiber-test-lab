@@ -57,7 +57,7 @@ Two-tier config: per-scenario settings live in each `scenarios/<name>.yaml`; glo
   - `npm run test:consumer` — installs the packed library into an empty project and uses it as an outsider would. No Docker.
   - `npm run lab -- test --all` — every YAML scenario end to end.
 - **Pinned versions matter**: the FNN binary and `@ckb-ccc/fiber` are version-pinned (in `package.json` and `docs/scenario-catalog.md`); verify results are only valid for the pinned versions.
-- **The package version follows the pinned FNN** (BR-DET-003), so `fnnVersion` and `version` change together. `docs/releasing.md` has the rule and the release steps; pushing a `v*` tag publishes to npm.
+- **Every package release pins one FNN release** (BR-DET-003); `npm run release:set -- <version> <fnn>` changes both together. `docs/releasing.md` has the rule and the release steps; pushing a `v*` tag publishes to npm.
 
 ## Non-negotiable invariants (from business-rules)
 

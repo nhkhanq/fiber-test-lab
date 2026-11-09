@@ -4,41 +4,31 @@ import { releaseInfo } from "../../lib/release";
 import pkg from "../../package.json" with { type: "json" };
 
 describe("releaseInfo", () => {
-  it("sends a stable FNN release to latest", () => {
-    expect(releaseInfo("0.9.1", "0.9.1", "v0.9.1")).toEqual({ version: "0.9.1", fnn: "0.9.1", distTag: "latest" });
+  it("sends a stable package pinning a stable FNN to latest", () => {
+    expect(releaseInfo("1.2.0", "0.9.1", "v1.2.0")).toEqual({ version: "1.2.0", fnn: "0.9.1", distTag: "latest" });
   });
 
-  it("sends a release candidate to next", () => {
-    expect(releaseInfo("0.10.0-rc2", "0.10.0-rc2").distTag).toBe("next");
+  it("sends a release candidate pinning the same FNN candidate to next", () => {
+    expect(releaseInfo("1.3.0-rc.2", "0.10.0-rc2").distTag).toBe("next");
   });
 
-  it("gives a fix to the lab alone the next patch on the same line", () => {
-    expect(releaseInfo("0.9.2", "0.9.1").distTag).toBe("latest");
-  });
-
-  it("gives a fix to the lab alone a numbered suffix on a release candidate", () => {
-    expect(releaseInfo("0.10.0-rc2.1", "0.10.0-rc2").distTag).toBe("next");
+  it("allows a fix to a release candidate", () => {
+    expect(releaseInfo("1.3.0-rc.2.1", "0.10.0-rc2").distTag).toBe("next");
   });
 
   it.each([
-    ["0.10.0", "0.9.1"],
-    ["0.9.0", "0.9.1"],
-    ["0.10.0-rc1", "0.10.0-rc2"],
-    ["0.10.0-rc23", "0.10.0-rc2"],
-    ["0.10.0-rc2", "0.10.0"],
-    ["0.10.0", "0.10.0-rc2"],
-    ["0.10.1-rc2", "0.10.0-rc2"],
-    ["0.9.2-rc1", "0.9.1"],
+    ["1.3.0-rc.2", "0.9.1"],
+    ["1.3.0-rc.1", "0.10.0-rc2"],
+    ["1.3.0-rc.2", "0.10.0-rc12"],
+    ["1.3.0", "0.10.0-rc2"],
+    ["1.3.0-beta.1", "0.10.0-rc1"],
+    ["latest", "0.9.1"],
   ])("rejects package %s pinning FNN %s", (version, fnn) => {
-    expect(() => releaseInfo(version, fnn)).toThrow(/does not follow/);
-  });
-
-  it("rejects something that is not a version", () => {
-    expect(() => releaseInfo("latest", "0.9.1")).toThrow(/not a release version/);
+    expect(() => releaseInfo(version, fnn)).toThrow(/does not fit/);
   });
 
   it("rejects a tag that names another version", () => {
-    expect(() => releaseInfo("0.9.1", "0.9.1", "v0.9.2")).toThrow(/expected v0\.9\.1/);
+    expect(() => releaseInfo("1.2.0", "0.9.1", "v1.2.1")).toThrow(/expected v1\.2\.0/);
   });
 
   it("holds for this repository's own version and pin", () => {
