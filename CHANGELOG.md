@@ -1,21 +1,20 @@
 # Changelog
 
-From 0.9.1 on, the package is numbered after the FNN release it pins, the way
-`@nervosnetwork/fiber-js` is; [`docs/releasing.md`](docs/releasing.md) has the rule. 1.0.0 and 1.1.0
-predate it. Verification results only hold for the pinned FNN and `@ckb-ccc/fiber` versions recorded
-in [`docs/scenario-catalog.md`](docs/scenario-catalog.md).
+Versions follow [semver](https://semver.org/). Every release pins one FNN release, and
+[`docs/releasing.md`](docs/releasing.md) has the rule. Verification results only hold for the pinned
+FNN and `@ckb-ccc/fiber` versions recorded in [`docs/scenario-catalog.md`](docs/scenario-catalog.md).
 
-## 0.9.1
+## 1.2.0
 
-Pins FNN 0.9.1. The same code is released as `0.10.0-rc2`, under the `next` tag, pinned to FNN
-0.10.0-rc2.
+Pins FNN 0.9.1. `1.3.0-rc.2`, on the `next` tag, is the same code pinned to FNN 0.10.0-rc2.
 
 ### Added
 
 - **Releases follow Fiber.** Pushing a `v*` tag runs every check against the pinned FNN, then
   publishes to npm: a stable version to `latest`, a release candidate to `next`. A version that does
-  not follow the pinned FNN is rejected by a unit test and before any `npm publish`.
+  not fit the pinned FNN is rejected by a unit test and before any `npm publish`.
 - `fiber-lab doctor` prints the FNN version the project will run.
+- The run viewer names the FNN and CKB versions a run used.
 - **The lab drives the chain.** No miner runs by default; blocks are mined through `generate_block`
   only while something is waiting on-chain, so opening a channel takes about 3 s instead of 35 s and
   the chain stands still between steps. New seed actions `mine` and `advance_epochs`, and
@@ -74,6 +73,11 @@ Pins FNN 0.9.1. The same code is released as `0.10.0-rc2`, under the `next` tag,
 
 ### Fixed
 
+- `expectChannelState` reads the channel reserve from the node. It assumed 99 CKB, which reported a
+  500 CKB channel as 499 on FNN 0.10, where the reserve is 100.
+- The run viewer no longer shows `null ✓` for a scenario with step expectations only, or marks a
+  step that failed as the scenario expected. A refused step says what the node refused.
+- A long node name stays inside its circle, and a force-closed channel shows as closed.
 - `expect.reason` now reads payments that fail after being accepted (`failed_error`), which used to
   be reported as a mismatch.
 - A scenario with a top-level `expect` and no payment is rejected instead of passing unchecked.

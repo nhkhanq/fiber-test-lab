@@ -1,8 +1,9 @@
 # Fiber Test Lab
 
 Forcing a real Fiber Network failure on demand is one of the hardest things to do reliably:
-you cannot make a peer go offline mid-payment, drain a channel to an exact balance, or expire
-an invoice, on a shared public testnet, and have it happen the same way twice. Fiber Test Lab
+you cannot make a peer go offline mid-payment, drain a channel to an exact balance, expire an
+invoice, hold a payment open across a node restart, or force-close a channel and wait out its
+delay, on a shared public testnet, and have it happen the same way twice. Fiber Test Lab
 solves this by reproducing every one of those failure modes deterministically, using real
 Fiber Network Node (FNN) processes and a real CKB devnet running entirely on your own machine.
 
@@ -23,7 +24,8 @@ Diagnostics Infrastructure).
 ## What Fiber Test Lab does
 
 1. Declare a scenario: a YAML file listing the nodes, the channels between them, a sequence of
-   seed actions (a payment, an invoice, a killed node), and the expected outcome.
+   seed actions (a payment, a held invoice, a killed node, a force-close), and the expected
+   outcome.
 2. Run it: `fiber-lab up <scenario>` generates a Docker Compose topology for that scenario,
    starts real FNN nodes and a CKB devnet in an isolated network, and waits for every node to
    report healthy.
@@ -182,19 +184,16 @@ Install the package into any Node.js project:
 npm install --save-dev fiber-test-lab
 ```
 
-The package is numbered after the Fiber release it runs, the same way as
-`@nervosnetwork/fiber-js`, so choose the release your project targets:
+Each release pins one FNN release, and the npm tags mean the same as they do for
+`@nervosnetwork/fiber-js`:
 
 | Command | Runs |
 |---|---|
 | `npm install --save-dev fiber-test-lab` | The current stable FNN release (tag `latest`) |
 | `npm install --save-dev fiber-test-lab@next` | The newest FNN release candidate (tag `next`) |
-| `npm install --save-dev fiber-test-lab@0.9.1` | FNN 0.9.1 |
 
-A fix to the lab alone takes the next patch number on the same line, so the patch number can run
-ahead of FNN's, and `^0.9.1` picks up those fixes without moving to FNN 0.10. `npx fiber-lab doctor`
-prints the FNN version a project will run. Versions 1.0.0 and 1.1.0 predate this numbering and are
-older than 0.9.1.
+`npx fiber-lab doctor` prints the FNN version a project will run. To run a different FNN release with
+the same package, set `fnnVersion` (see [Configuration](#configuration)).
 
 This adds two things to the project:
 
@@ -294,8 +293,16 @@ version, results should be re-verified before being trusted.
 | CKB devnet image | nervos/ckb v0.207.0 |
 | Node.js | 20.6 or later |
 
-All 16 scenarios have also passed on FNN 0.10.0-rc1 and 0.10.0-rc2, and
-`fiber-test-lab@next` pins the newest of those release candidates.
+All 16 built-in scenarios pass on each FNN release the package is published for:
+
+| FNN | Package | Install |
+|---|---|---|
+| 0.9.1 | 1.2.0 | `fiber-test-lab` |
+| 0.10.0-rc2 | 1.3.0-rc.2 | `fiber-test-lab@next` |
+
+The channel reserve differs between these releases: 99 CKB on FNN 0.9 and 100 CKB on 0.10, so a
+500 CKB channel opens with 401 CKB of outbound balance on one and 400 on the other. A test that has
+to hold on both should assert a change (`localDelta`) or a range, as the built-in scenarios do.
 
 ## Quick start with the CLI
 
@@ -367,7 +374,7 @@ run-id is given. Removes containers, the isolated network and the run's working 
 run-log JSON file is kept so it remains available for later inspection.
 
 - `--images` also deletes the images the lab has built, including the per-run images that
-  versions before 1.2 left behind.
+  older versions left behind.
 - `--json` prints `{ "cleaned": string[], "images": string[] }`.
 
 ### test
@@ -419,7 +426,9 @@ recent run still up.
 fiber-lab doctor [--json]
 ```
 
-Checks Node.js, the Docker daemon and Compose, and exits 2 if any of them is missing.
+Checks Node.js, the Docker daemon and Compose, and exits 2 if any of them is missing. It also prints
+the FNN version the project will run.
+
 ### images
 
 ```bash
@@ -465,12 +474,23 @@ lines, `wait_ready` counts containers as they go healthy, `open_channel` names t
 Because the page only reloads when the run-log changes, a finished run's tab will not pick up
 changes to the viewer's own code — hard-refresh while working on it.
 
+### list
+
+```bash
+fiber-lab list [--json]
+```
+
+Lists every available scenario (built-in scenarios plus any in the current directory's
+`topology/scenarios`, if present) with its description, and every run recorded in
+`.fiber-lab/runs` with its status. A scenario file that fails validation is still listed, with
+`valid: false` and the validation error, instead of crashing the command.
+
 ## Run viewer
 
-![The run viewer: stat tiles, a channel topology graph with a scrubber, a step timeline and an RPC table](docs/images/run-viewer.png)
+![The run viewer showing hold-invoice-settle on FNN 0.10.0-rc2: stat tiles, a channel topology graph with a scrubber, a step timeline and an RPC table](docs/images/run-viewer.png)
 
-The same report renders two ways: `logs --html` writes it to a file, `ui` serves it live. Both
-show
+The same report renders two ways: `logs --html` writes it to a file, `ui` serves it live. The header
+names the FNN and CKB versions the run used, since a result only holds for those. Both show
 
 - a **topology graph** — one SVG edge per channel, split where the liquidity actually sits. Each
   segment wears the colour of the node holding it (colour follows the node, not the side of the
@@ -482,6 +502,11 @@ show
 - an **RPC table** — every call with a latency bar and duration, filterable by node, by method, by
   text, or down to errors only, and expandable to the raw params and response;
 - **stat tiles** for status, expectation, duration, call count and slowest call.
+
+A step that fails on purpose is not marked as a problem. When a scenario expects a refusal or a failed
+payment and gets it, as `hold-invoice-settle` does with an early and a wrong settle, the step passes
+and its line says what the node refused. After a one-sided close the channel shows as closed even
+while the other node still reports `ChannelReady`.
 
 The palette is the dataviz reference palette, checked with its validator across all node pairs in
 both light and dark mode (worst CVD ΔE 9.2 / 9.4). Status never rides on colour alone — every step
@@ -515,17 +540,6 @@ import { buildReportModel, renderReport, RunLogStore } from "fiber-test-lab/repo
 const log = await RunLogStore.load(runId)
 await writeFile("report.html", renderReport(buildReportModel(log)))
 ```
-
-### list
-
-```bash
-fiber-lab list [--json]
-```
-
-Lists every available scenario (built-in scenarios plus any in the current directory's
-`topology/scenarios`, if present) with its description, and every run recorded in
-`.fiber-lab/runs` with its status. A scenario file that fails validation is still listed, with
-`valid: false` and the validation error, instead of crashing the command.
 
 ## Scenario file reference
 
@@ -640,7 +654,8 @@ and the run-log records the result of each one on its step.
 ```
 
 Every amount is either an exact number or a `{ min, max }` range, in CKB or in base units for a
-UDT. `local` and `remote` are FNN's channel balances, which exclude the 99 CKB reserve. Omitting
+UDT. `local` and `remote` are FNN's channel balances, which exclude the channel reserve (see
+[Pinned versions](#pinned-versions)). Omitting
 `peer` sums across all of the node's channels in that asset. The `*Delta` forms compare with the
 state just before the step ran, so an `assert` step cannot use them. State checks are polled until
 they hold or `pollTimeoutMs` runs out, since balances settle a moment after a payment reports
@@ -702,6 +717,74 @@ without a file path.
 | `peer-reconnect` | alice, bob | per step | Payments fail while disconnected and work again after reconnecting. |
 | `restart-during-hold` | member, hub, organizer | per step | A held payment survives a restart of the receiver, and settles while the payer is down. |
 | `frozen-peer` | alice, bob | per step | A payment to a frozen peer is reported as a timeout, then completes when the peer wakes. |
+
+### The lifecycle scenarios in the run viewer
+
+Each report below comes from a run on FNN 0.10.0-rc2, and the same scenarios pass on FNN 0.9.1.
+
+<details>
+<summary><code>hold-invoice-settle</code>: a held payment, two refused settles, then the real one</summary>
+
+The payment locks across two hops. An early settle and a wrong preimage are refused, and the true
+preimage pays it out.
+
+![Run viewer for hold-invoice-settle: 15 step checks passed, with two settle_invoice steps refused as expected](docs/images/hold-invoice-settle.png)
+
+</details>
+
+<details>
+<summary><code>hold-invoice-cancel</code>: the receiver cancels and the payer gets the money back</summary>
+
+The payment reports `Failed` with `invoice_cancelled`, and the balances return to where they started.
+
+![Run viewer for hold-invoice-cancel: 10 step checks passed, with balances back at 900 CKB on each channel](docs/images/hold-invoice-cancel.png)
+
+</details>
+
+<details>
+<summary><code>channel-close</code>: a cooperative close</summary>
+
+Both nodes reach `Closed`, and each side's on-chain amount is checked.
+
+![Run viewer for channel-close: 5 step checks passed, with the channel shown as Closed](docs/images/channel-close.png)
+
+</details>
+
+<details>
+<summary><code>channel-force-close</code>: a unilateral close paid out after the delay</summary>
+
+`advance_epochs` jumps the commitment delay, then both sides' on-chain payouts are checked.
+
+![Run viewer for channel-force-close: 4 step checks passed, with the channel shown as Closed](docs/images/channel-force-close.png)
+
+</details>
+
+<details>
+<summary><code>peer-reconnect</code>: payments stop while disconnected and resume on the same channel</summary>
+
+The payment made while the peers are disconnected fails as the scenario expects.
+
+![Run viewer for peer-reconnect: 7 step checks passed, with a failed payment between two successful ones](docs/images/peer-reconnect.png)
+
+</details>
+
+<details>
+<summary><code>restart-during-hold</code>: held payments survive a restart</summary>
+
+One payment survives a restart of the receiver, and another settles while the payer is down.
+
+![Run viewer for restart-during-hold: 14 step checks passed across two held payments and two node restarts](docs/images/restart-during-hold.png)
+
+</details>
+
+<details>
+<summary><code>frozen-peer</code>: a timeout is not a failure</summary>
+
+A payment to a frozen node is reported as timed out, then succeeds when the node resumes.
+
+![Run viewer for frozen-peer: 3 step checks passed, with a timed out payment that later succeeds](docs/images/frozen-peer.png)
+
+</details>
 
 ## Writing a custom scenario
 
@@ -954,8 +1037,8 @@ Parameters:
 - `expected.status` -- the expected `state_name`, for example `"ChannelReady"`. When given,
   this function polls until the channel reaches that state or the timeout elapses.
 - `expected.capacity` -- the expected total channel capacity in CKB. Computed as the sum of
-  the channel's local and remote balances plus the fixed reserve (99 CKB), since `FNN`'s
-  `list_channels` response does not include the original funding amount directly.
+  the channel's local and remote balances plus the reserve the node reports in `node_info`, since
+  `FNN`'s `list_channels` response does not include the original funding amount directly.
 
 What it verifies: that a channel reached a specific lifecycle state (most commonly
 `ChannelReady`) and, optionally, that it was funded with the expected capacity.
@@ -1105,7 +1188,7 @@ run-logs, HTML reports and JUnit file as an artifact:
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: nhkhanq/fiber-test-lab@v0.9.1
+- uses: nhkhanq/fiber-test-lab@v1.2.0
   with:
     scenarios: ./scenarios/checkout.yaml   # or all: "true", or tags: "smoke payment"
 ```

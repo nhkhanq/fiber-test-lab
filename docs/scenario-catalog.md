@@ -16,9 +16,11 @@ Danh mục scenario của Fiber Test Lab kèm **kết quả verify thật** và 
 
 | FNN | Package | Kết quả 16 scenario |
 |---|---|---|
-| 0.9.1 | `fiber-test-lab@0.9.1` (`latest`) | Đạt 16/16 trên máy local và CI |
+| 0.9.1 | `fiber-test-lab@1.2.0` (`latest`) | Đạt 16/16 trên máy local và CI |
 | 0.10.0-rc1 | không phát hành | Đạt 16/16 trên máy local và CI |
-| 0.10.0-rc2 | `fiber-test-lab@0.10.0-rc2` (`next`) | Đạt 16/16 trên máy local, 2026-11-09 |
+| 0.10.0-rc2 | `fiber-test-lab@1.3.0-rc.2` (`next`) | Đạt 16/16 trên máy local và CI, 2026-11-09 |
+
+Số dư ghi trong từng scenario bên dưới đo trên FNN 0.9.1. Từ 0.10 reserve là 100 CKB, nên `local` của bên mở kênh thấp hơn 1 CKB so với các số này. Ảnh report của 7 scenario lifecycle chụp trên 0.10.0-rc2 nằm trong README, mục Built-in scenarios.
 
 ## Global config (`fiber-lab.config.ts`)
 
@@ -45,7 +47,7 @@ Viewer chỉ **đọc** run-log, không gọi RPC vào node — sau `reset` cont
 ## Giới hạn
 
 - **Tối đa 5 node/scenario** — trên 3 node sẽ in cảnh báo; genesis pre-fund 6 account (10 tỷ CKB/node).
-- **Kênh single-funded** — chỉ bên `from` cấp vốn; `capacity` verify = `local+remote balance + reserve(99 CKB)`.
+- **Kênh single-funded** — chỉ bên `from` cấp vốn; `capacity` verify = `local+remote balance + reserve` do node báo (99 CKB trên FNN 0.9, 100 CKB trên 0.10).
 - **Devnet ≠ mainnet** — xem `docs/trade-offs.md`.
 
 ## Scenarios
