@@ -32,6 +32,11 @@ and `@ckb-ccc/fiber` versions recorded in [`docs/scenario-catalog.md`](docs/scen
 - Step expectations gain `error` (a refusal the step must get), `peers`, TLC amounts in balance
   checks (`offered`, `received`) and `flags` on channel checks. New failure reason
   `invoice_cancelled`.
+- **Usable from any codebase.** `fiber-test-lab/test-kit` imports with no configuration under Vitest and
+  `node:test`; `.d.ts` files work under `Bundler` and `NodeNext`. `fiber-lab env`, `node`, `peer`,
+  `chain` and `channel` let a test in any language describe a run and force states on it, with a Python
+  example. A project can have its own `fiber-lab.config.json`, and a scenario with no seed is an
+  environment for an application to run against. `fiber-lab doctor` checks the machine.
 - `fiber-lab images` builds or pulls the images ahead of time, and the GitHub Action caches them.
 - **Up to 5 nodes per scenario**, with a warning above 3; genesis now funds 6 accounts.
 - A Docker-free unit suite: `npm run test:unit`. `npm run test:integration` runs the rest.
@@ -70,6 +75,8 @@ and `@ckb-ccc/fiber` versions recorded in [`docs/scenario-catalog.md`](docs/scen
 - The CKB image no longer depends on the Ubuntu 20.04 apt archive, which could fail a fresh build.
 - `peer_offline` no longer misfires for a payer with no channel to the target.
 - `cli/index.ts` is checked out with LF on Windows, so its shebang works.
+- `npx fiber-lab` works on Windows when installed from the package.
+- `up` returns only after gossip has reached every node, so an outside client can route at once.
 - A restarted node keeps working: Docker gives it a new host port, which every endpoint now follows.
 - Paying an invoice waits for gossip like a keysend does, instead of failing with `no path found`
   right after a multi-hop topology comes up.

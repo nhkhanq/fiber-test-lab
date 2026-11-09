@@ -24,17 +24,25 @@
   "license": "MIT",
   "author": "nhkhanq",
   "engines": {
-    "node": ">=20"
+    "node": ">=20.6"
   },
   "bin": {
-    "fiber-lab": "cli/index.ts"
+    "fiber-lab": "bin/fiber-lab.mjs"
   },
   "exports": {
-    "./test-kit": "./test-kit/index.ts",
-    "./report": "./lib/report/index.ts"
+    "./test-kit": {
+      "types": "./types/test-kit/index.d.ts",
+      "default": "./test-kit/entry.mjs"
+    },
+    "./report": {
+      "types": "./types/lib/report/index.d.ts",
+      "default": "./lib/report/entry.mjs"
+    }
   },
   "files": [
     "CHANGELOG.md",
+    "bin",
+    "types",
     "cli",
     "lib",
     "test-kit",
@@ -45,11 +53,13 @@
     "tsconfig.json"
   ],
   "scripts": {
+    "prepare": "node scripts/build-types.mjs",
     "lab": "tsx cli/index.ts",
     "ui": "tsx cli/index.ts ui --open",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:unit": "vitest run test/unit/ test/report.test.ts test/shebang.test.ts",
+    "test:consumer": "node scripts/check-consumer.mjs",
     "test:integration": "vitest run test/ test-kit/examples/ --exclude \"test/unit/**\" --exclude test/report.test.ts --exclude test/shebang.test.ts"
   },
   "dependencies": {

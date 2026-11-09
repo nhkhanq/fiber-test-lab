@@ -306,6 +306,11 @@ export async function listRuns(): Promise<RunLog[]> {
   return runs.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
 }
 
+/** The most recent run that finished coming up and has not been reset. */
+export async function latestLiveRun(): Promise<RunLog | null> {
+  return (await listRuns()).find((r) => r.status === "completed" || r.status === "running") ?? null;
+}
+
 /** The scenario's most recent live (non-reset) run — used by `fiber-lab seed` when `--run` is omitted. */
 export async function latestRunForScenario(scenario: string): Promise<RunLog | null> {
   const runs = await listRuns();

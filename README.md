@@ -49,6 +49,7 @@ is meant to cover. The architecture and design rationale follow below the table 
 - Design notes
 - Requirements
 - Installation
+- Using it from your project
 - Pinned versions
 - Quick start with the CLI
 - CLI command reference
@@ -162,10 +163,13 @@ reference below for the full classification table.
 ## Requirements
 
 - Docker with Compose v2 available as `docker compose`.
-- Node.js 20 or later.
+- Node.js 20.6 or later.
 - Enough local resources to run one CKB devnet plus the scenario's FNN nodes per active
   scenario. Scenarios do not share containers with each other. Three nodes is the comfortable
-  size; up to five are allowed, and a scenario above three prints a warning.
+  size; up to five are allowed by default, a project can raise that to six, and a scenario above
+  three prints a warning.
+
+`fiber-lab doctor` checks all of this and says what is missing.
 
 No separate build step is required. The package ships TypeScript source and runs directly
 through `tsx`, which is installed as a regular dependency.
@@ -187,6 +191,82 @@ Docker is required on the machine actually running the scenarios (the developer'
 a CI runner), not on the machine that only imports `fiber-test-lab/test-kit` as a type or
 build dependency.
 
+## Using it from your project
+
+There are three ways in, and all of them drive the same real nodes.
+
+### From a JavaScript or TypeScript test
+
+`fiber-test-lab/test-kit` needs no configuration under Vitest or `node:test`, from TypeScript or
+plain JavaScript. CommonJS code reaches it through `await import()`. Types ship as `.d.ts` files and
+work under `Bundler` and `NodeNext` resolution.
+
+```typescript
+import { test } from "node:test";
+import { expectBalance, setupScenario } from "fiber-test-lab/test-kit";
+
+test("a tip reaches the creator", async () => {
+  const ctx = await setupScenario({
+    name: "tip",
+    nodes: ["fan", "creator"],
+    channels: [{ from: "fan", to: "creator", capacity: 500 }],
+  });
+  try {
+    await ctx.pay("fan", "creator", 25);
+    await expectBalance(ctx, { node: "creator", local: 25 });
+  } finally {
+    await ctx.reset();
+  }
+});
+```
+
+Jest cannot load the package directly, because its module system cannot run the TypeScript entry. A
+Jest suite can drive the lab through the CLI, as below.
+
+### From any other language
+
+Everything a test needs is a CLI command that prints JSON. `fiber-lab up <scenario> --json` returns an
+`environment` object with each node's RPC endpoint, pubkey and funded key, and the CKB endpoint and
+genesis hashes. `fiber-lab env` prints the same again, as JSON or `KEY=value` lines. Your test then
+talks to the nodes over JSON-RPC, and forces states through `fiber-lab node`, `peer`, `chain` and
+`channel`, each of which lands in the run-log.
+
+`examples/python/test_payments.py` is a complete example using only the Python standard library.
+
+### As an environment for your application
+
+A scenario with no `seed` needs no expectations: it brings up nodes and channels and leaves them for
+your application. `fiber-lab up` returns once gossip has reached every node, so the first payment your
+code sends can already route. If your application opens channels itself, set `chain.mining: auto` so
+that blocks keep coming.
+
+```yaml
+name: my-app-env
+nodes: [wallet, merchant]
+channels:
+  - { from: wallet, to: merchant, capacity: 500 }
+chain:
+  mining: auto
+```
+
+### Configuration
+
+Each layer overrides the one before it:
+
+1. The defaults shipped with the package.
+2. `fiber-lab.config.json` in the working directory, so a project in any language can have one.
+3. Environment variables: `FIBER_LAB_FNN_VERSION`, `FIBER_LAB_IMAGE_REGISTRY`,
+   `FIBER_LAB_POLL_INTERVAL_MS`, `FIBER_LAB_POLL_TIMEOUT_MS`, `FIBER_LAB_BLOCK_INTERVAL_MS`,
+   `FIBER_LAB_MAX_NODES`.
+4. `setupScenario(scenario, { config: { ... } })`.
+
+```json
+{ "fnnVersion": "0.9.1", "pollTimeoutMs": 90000, "maxNodesPerScenario": 6 }
+```
+
+The keys are `pollIntervalMs`, `pollTimeoutMs`, `blockIntervalMs`, `dockerNetworkPrefix`, `fnnVersion`,
+`imageRegistry`, `logLevel`, `keepRunOnFailure` and `maxNodesPerScenario`. An unknown key is an error.
+
 ## Pinned versions
 
 Every scenario result in this document, and every result the test-kit verifies, is only valid
@@ -198,7 +278,7 @@ version, results should be re-verified before being trusted.
 | Fiber Network Node (FNN) | 0.9.1 (commit 9a561b3) |
 | `@ckb-ccc/core` and `@ckb-ccc/fiber` | 0.0.0-canary-20260330023358 |
 | CKB devnet image | nervos/ckb v0.207.0 |
-| Node.js | 20 or later |
+| Node.js | 20.6 or later |
 
 ## Quick start with the CLI
 
@@ -237,8 +317,8 @@ version and shared by every run.
 
 - `<scenario>` is a built-in scenario name (see Built-in scenarios) or a path to a `.yaml`
   file, resolved relative to the current working directory.
-- `--json` prints `{ "runId": string, "network": string, "nodes": NodeRecord[] }` instead of
-  just the run-id.
+- `--json` prints `{ "runId": string, "network": string, "nodes": NodeRecord[], "environment": Environment }`
+  instead of just the run-id. `environment` is what `fiber-lab env --json` prints.
 - `--keep` leaves the containers running if the run fails, instead of tearing them down, so
   the state can be inspected with `docker logs` or `fiber-lab logs`.
 
@@ -293,6 +373,36 @@ Exit code 0 means everything passed, 3 that at least one scenario ran but did no
 expectations, and 2 that at least one could not run at all, which takes priority because it means
 the results cannot be trusted.
 
+### env
+
+```bash
+fiber-lab env [run-id] [--json] [--dotenv]
+```
+
+Prints what a client needs to use a run: each node's RPC endpoint, pubkey, lock and funded devnet key,
+and the CKB endpoint and genesis hashes. Without a run-id it uses the most recent run still up.
+`--dotenv` prints `KEY=value` lines such as `FIBER_LAB_NODE_ALICE_RPC`.
+
+### node, peer, chain, channel
+
+```bash
+fiber-lab node <kill|start|pause|resume> <node> [--run <run-id>] [--json]
+fiber-lab peer <disconnect|connect> <from> <to> [--run <run-id>] [--json]
+fiber-lab chain <tip|mine|epochs> [count] [--run <run-id>] [--json]
+fiber-lab channel <open|close> <from> <to> [capacity] [--force] [--run <run-id>] [--json]
+```
+
+Force a state on a run from outside it, at the moment a test needs it. They do what the seed actions
+of the same names do, and record the same steps in the run-log. Without `--run` they act on the most
+recent run still up.
+
+### doctor
+
+```bash
+fiber-lab doctor [--json]
+```
+
+Checks Node.js, the Docker daemon and Compose, and exits 2 if any of them is missing.
 ### images
 
 ```bash
@@ -459,8 +569,9 @@ Validation rules enforced before any Docker resource is created:
 - `expect.reason` can only be set when `expect.status` is `failed`.
 - Unknown keys are rejected, so a misspelled field fails instead of being ignored.
 - Amounts must be exact: at most 8 decimals for CKB, whole units for a UDT.
-- A scenario must declare at least one expectation, and a top-level `expect` needs a
-  `send_payment` to describe.
+- A scenario with a seed must declare at least one expectation, and a top-level `expect` needs a
+  `send_payment` to describe. A scenario with no seed is an environment for something else to
+  test against; `fiber-lab test` refuses to count one as a pass.
 
 Amounts are interpreted in CKB units for the `CKB` asset, and in raw token units for `RUSD`.
 
@@ -632,7 +743,7 @@ import {
 ```typescript
 function setupScenario(
   input: string | ScenarioInput,
-  options?: { keep?: boolean },
+  options?: { keep?: boolean; config?: Partial<GlobalConfig> },
 ): Promise<ScenarioContext>
 ```
 
@@ -647,6 +758,7 @@ Parameters:
   scenario), or a scenario object with the same shape, validated by the same rules.
 - `options.keep` -- when `true`, containers are left running after a runtime failure for
   debugging, instead of being torn down.
+- `options.config` -- settings for this run only; see Configuration.
 
 Returns a `ScenarioContext`.
 

@@ -2,6 +2,7 @@
 import { Command } from "commander";
 import pkg from "../package.json" with { type: "json" };
 import { exitCodeFor } from "../lib/errors";
+import { registerControlCommands } from "./commands/control";
 import { registerImagesCommand } from "./commands/images";
 import { registerListCommand } from "./commands/list";
 import { registerLogsCommand } from "./commands/logs";
@@ -24,6 +25,7 @@ registerLogsCommand(program);
 registerSeedCommand(program);
 registerTestCommand(program);
 registerUiCommand(program);
+registerControlCommands(program);
 registerImagesCommand(program);
 
 program.parseAsync(process.argv).catch((error) => {

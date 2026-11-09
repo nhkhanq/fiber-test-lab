@@ -159,7 +159,7 @@ Records an entire `fiber-lab up` run so it can be debugged after the containers 
 - Unknown keys are rejected at every level, so a misspelled field fails validation instead of being ignored.
 - `channels[].from`/`to`, and every node named in `seed` (including inside `expect`), must be within `nodes` — otherwise: a clear error, "node X is not declared in nodes".
 - Amounts must be exact in base units: at most 8 decimals for CKB, a whole number for a UDT.
-- A scenario must declare at least one expectation, and a top-level `expect` needs a `send_payment` to describe.
+- A scenario with a seed must declare at least one expectation, and a top-level `expect` needs a `send_payment` to describe. A scenario with no seed is an environment and needs none.
 - `status`, `reason` and `fee` on a step only apply to `send_payment` and `await_payment`; `error` only to the steps that can be refused.
 - `hold`, `finalExpiryDeltaSec`, `waitFor`, `timeoutSec`, `wrongPreimage` and `force` are rejected on any action they do not apply to.
 - `status: inflight` requires `waitFor: inflight`, and `status: timeout` rules it out.

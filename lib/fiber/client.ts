@@ -1,5 +1,5 @@
-import { ccc } from "@ckb-ccc/core";
-import { FiberSDK, fiber } from "@ckb-ccc/fiber";
+import type { ccc } from "@ckb-ccc/core";
+import type { FiberSDK, fiber } from "@ckb-ccc/fiber";
 import { jsonRpcCall, type RpcCallRecord, type RpcLogger } from "./jsonRpc";
 
 export type { RpcCallRecord, RpcLogger };
@@ -22,7 +22,9 @@ export class FiberClient {
     this.#logger = options.logger;
   }
 
-  #sdk(node: string): FiberSDK {
+  /** Loaded on first use: its ESM build has extensionless imports that plain Node refuses, and
+   *  merely importing this file must work from any test runner. */
+  async #sdk(node: string): Promise<FiberSDK> {
     let sdk = this.#sdks.get(node);
     if (!sdk) {
       const endpoint = this.#endpoints[node];
@@ -31,7 +33,8 @@ export class FiberClient {
           `Unknown node "${node}" — no endpoint configured (have: ${Object.keys(this.#endpoints).join(", ") || "none"})`,
         );
       }
-      sdk = new FiberSDK({ endpoint, timeout: this.#timeoutMs });
+      const { FiberSDK: Sdk } = await import("@ckb-ccc/fiber");
+      sdk = new Sdk({ endpoint, timeout: this.#timeoutMs });
       this.#sdks.set(node, sdk);
     }
     return sdk;
@@ -47,7 +50,7 @@ export class FiberClient {
     const started = performance.now();
     const durationMs = () => Math.round(performance.now() - started);
     try {
-      const response = await fn(this.#sdk(node));
+      const response = await fn(await this.#sdk(node));
       this.#logger?.({ node, method, params, response, at, durationMs: durationMs() });
       return response;
     } catch (error) {

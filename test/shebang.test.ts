@@ -13,6 +13,7 @@ const EXECUTABLES: Record<string, string> = {
   "topology/docker/ckb/entrypoint.sh": "#!/usr/bin/env bash",
   "topology/docker/fnn/entrypoint.sh": "#!/usr/bin/env bash",
   "cli/index.ts": "#!/usr/bin/env -S npx tsx",
+  "bin/fiber-lab.mjs": "#!/usr/bin/env node",
 };
 
 describe("executables keep their shebang", () => {

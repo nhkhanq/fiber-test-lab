@@ -1,0 +1,6 @@
+name: three-nodes
+description: An environment with a two-hop route and nothing else
+nodes: [alice, bob, charlie]
+channels:
+  - { from: alice, to: bob, capacity: 500 }
+  - { from: bob, to: charlie, capacity: 500 }

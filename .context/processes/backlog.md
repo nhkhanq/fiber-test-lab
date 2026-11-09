@@ -228,6 +228,15 @@ tags: [backlog, tasks, tickets]
 **E11-3** ✅ · Closing channels: cooperative and forced, on-chain results, mining while a chain-dependent check waits · est 3
 **E11-4** ✅ · Connectivity: `disconnect_peer`, `connect_peer`, `pause_node`, `resume_node`, restart with a TLC pending, endpoints follow a restart · est 3
 
+## EPIC E12 — A library other codebases can use
+
+**E12-1** ✅ · A binary that starts on every OS, and imports that need no bundler or test-runner configuration · est 2
+**E12-2** ✅ · Generated declarations that work under `Bundler`, `NodeNext` and strict consumer flags · est 2
+**E12-3** ✅ · Per-project configuration: `fiber-lab.config.json`, environment variables, code · est 1
+**E12-4** ✅ · Language-neutral control: `env`, `node`, `peer`, `chain`, `channel`, and a Python example · est 3
+**E12-5** ✅ · `up` returns after gossip; a no-seed scenario is an environment; `doctor` · est 2
+**E12-6** ✅ · CI installs the packed library as an outside project on Linux, Windows and macOS · est 2
+
 ## Total estimate
 
 - Must-have (E0–E7): ~65 points

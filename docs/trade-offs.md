@@ -46,6 +46,11 @@ Fiber Test Lab đánh đổi có chủ đích để đạt mục tiêu chính: *
 - CKB RPC mở port map tạm để mint và sinh block (đóng khi reset). `fiber-lab seed` dùng lại token đã mint trong lần `up` nhờ run-log.
 - Mỗi node cấp vốn kênh UDT tự mint token của riêng nó, nên chưa route được UDT qua nhiều hop.
 
+## Dùng từ dự án khác
+
+- Vitest và `node:test` import được không cần cấu hình. Jest thì không tải trực tiếp được vì không chạy nổi entry TypeScript; suite Jest cần điều khiển qua CLI.
+- macOS mới được kiểm tra phần cài đặt, import và type trên CI, chưa chạy container thật.
+
 ## Bảo trì version
 
 - `@ckb-ccc` đang ở bản canary, API còn lệch với FNN (một số RPC phải gọi `rawCall` thay vì SDK typed). Khi nâng version phải: chạy lại toàn bộ scenario (`FIBER_LAB_FNN_VERSION=<bản mới> fiber-lab test --all`), cập nhật `scenario-catalog.md`, và kiểm lại mapping lỗi.

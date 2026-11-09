@@ -1,0 +1,5 @@
+name: two-nodes
+description: Two funded nodes with an open channel, and nothing else, for a test written in another language
+nodes: [alice, bob]
+channels:
+  - { from: alice, to: bob, capacity: 500 }

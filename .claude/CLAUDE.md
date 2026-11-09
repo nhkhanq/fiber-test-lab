@@ -45,15 +45,16 @@ Two-tier config: per-scenario settings live in each `scenarios/<name>.yaml`; glo
 
 ## Stack & commands
 
-- **TypeScript strict**, run directly via `tsx` — **there is no build step and no `dist`**: `bin` points at `cli/index.ts` and `files:` ships source. Keep it that way; it is why the viewer is vanilla rather than a bundled framework app.
+- **TypeScript strict**, run directly via `tsx` — **there is no build step and no `dist`** for anything that runs: `files:` ships source, and `bin/fiber-lab.mjs` and the `entry.mjs` files register `tsx` and import it. Keep it that way; it is why the viewer is vanilla rather than a bundled framework app. The one generated output is `types/`, the `.d.ts` files consuming projects compile against, emitted by `prepare`.
 - Package manager: `npm` (single package, no workspace). Test framework: **Vitest**.
-- CLI: `fiber-lab up|seed|test|images|reset|logs|list|ui`. Every command supports `--json` for CI. Exit codes: `0` ok, `1` config/validation error, `2` runtime (docker/RPC) error, `3` expectation mismatch.
+- CLI: `fiber-lab up|seed|test|images|env|node|peer|chain|channel|doctor|reset|logs|list|ui`. Every command supports `--json` for CI. Exit codes: `0` ok, `1` config/validation error, `2` runtime (docker/RPC) error, `3` expectation mismatch.
 - Day to day:
   - `npm run lab -- <command>` — the CLI from source (e.g. `npm run lab -- up direct-channel`)
   - `npm run ui` — the run viewer, opens a browser
   - `npm run typecheck` — `tsc --noEmit`
   - `npm run test:unit` — no Docker, seconds. Run this first.
   - `npm run test:integration` — real containers, minutes. `npm test` runs both.
+  - `npm run test:consumer` — installs the packed library into an empty project and uses it as an outsider would. No Docker.
   - `npm run lab -- test --all` — every YAML scenario end to end.
 - **Pinned versions matter**: the FNN binary and `@ckb-ccc/fiber` are version-pinned (in `package.json` and `docs/scenario-catalog.md`); verify results are only valid for the pinned versions.
 

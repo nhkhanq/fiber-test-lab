@@ -21,7 +21,7 @@ Danh mục scenario của Fiber Test Lab kèm **kết quả verify thật** và 
 | `blockIntervalMs` | 200 | nhịp lab tự sinh block trong lúc chờ on-chain |
 | `dockerNetworkPrefix` | `flab` | network = `flab_<run-id>` |
 | `keepRunOnFailure` | false | lỗi → tự teardown (trừ `--keep`) |
-| `maxNodesPerScenario` | 5 | ghi đè có chủ đích mức mặc định 3 (BR-ISO-003); genesis pre-fund 6 account |
+| `maxNodesPerScenario` | 5 | ghi đè có chủ đích mức mặc định 3 (BR-ISO-003); genesis pre-fund 6 account, dự án dùng có thể nâng lên 6 bằng `fiber-lab.config.json` |
 
 Gossip interval hạ xuống **2000ms** (mặc định FNN 60s) để multi-hop route lan nhanh & tất định — xem E5-2.
 

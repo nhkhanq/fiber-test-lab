@@ -47,6 +47,37 @@ jobs:
           fnn-version: ${{ matrix.fnn }}
           prepare-only: "true"
 
+  consumer:
+    needs: unit
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run test:consumer
+
+  python-example:
+    needs: images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: ./
+        with:
+          prepare-only: "true"
+      - run: python -m unittest discover -s examples/python -v
+        env:
+          FIBER_LAB_CLI: npm run -s lab --
+
   scenarios:
     needs: images
     runs-on: ubuntu-latest

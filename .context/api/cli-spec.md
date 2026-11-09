@@ -12,7 +12,7 @@ tags: [cli, commander, commands]
 
 - Every command prints a human-readable result to stdout; add `--json` for machine-readable JSON (for CI).
 - Exit code: `0` success, `1` config/validation error, `2` runtime error (docker/RPC), `3` expectation mismatch.
-- Every command reads `fiber-lab.config.ts` (global config) unless overridden by a flag.
+- Every command reads its configuration in this order, later layers winning: the shipped `fiber-lab.config.ts`, `fiber-lab.config.json` in the working directory, `FIBER_LAB_*` environment variables, then a flag.
 
 ## Commands
 
@@ -21,7 +21,7 @@ Build the topology for a scenario.
 - `<scenario>` — a file name under `topology/scenarios/` (no `.yaml` extension needed)
 - `--keep` — do not tear down automatically on error (for debugging)
 - **What it does:** validate the YAML → generate a run-id → build or reuse the versioned images → start the CKB devnet → read its genesis → start the FNN nodes → open channels per `channels`, mining until both sides report READY → run the seed.
-- **Output:** prints the `run-id` (used by later commands). `--json` → `{ runId, network, nodes: [...] }`.
+- **Output:** prints the `run-id` (used by later commands). `--json` → `{ runId, network, nodes: [...], environment }`, where `environment` is what `fiber-lab env --json` prints. `up` returns once gossip has reached every node.
 - **Errors:** bad schema → exit 1; docker/RPC error → exit 2, the run-log records the cause.
 
 ### `fiber-lab seed <scenario> [--run <run-id>] [--json]`
@@ -48,6 +48,17 @@ Run scenarios one at a time, tear each one down, and report the results.
 - `--keep` — keep the containers of a scenario that does not pass.
 - **Exit code:** `0` all passed, `3` at least one mismatch, `2` at least one could not run (takes priority), `1` nothing valid was selected.
 
+### `fiber-lab env [run-id] [--json] [--dotenv]`
+Print what a client in any language needs to use a run, read from its run-log: each node's RPC endpoint, pubkey, lock and funded devnet key, and the CKB endpoint and genesis hashes. Defaults to the most recent run still up.
+
+### Control commands
+`fiber-lab node <kill|start|pause|resume> <node>`, `fiber-lab peer <disconnect|connect> <from> <to>`, `fiber-lab chain <tip|mine|epochs> [count]`, `fiber-lab channel <open|close> <from> <to> [capacity] [--force]`. All take `[--run <run-id>] [--json]` and default to the most recent run still up.
+- They force a state on a live run from outside it, so a test in any language can do what the seed actions and the test-kit do.
+- Each attaches to the run through its run-log, acts through the same runtime, and records the same steps. A later command sees what an earlier one did (a paused node stays offline across processes).
+- **Exit code:** `1` bad arguments or no such run, `2` the action failed.
+
+### `fiber-lab doctor [--json]`
+Check Node.js, the Docker daemon and Compose. Exit code `2` if any is missing.
 ### `fiber-lab images [--json]`
 Build or pull the images for the configured versions without starting anything. `--json` prints their names.
 
