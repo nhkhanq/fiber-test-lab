@@ -1,4 +1,4 @@
-import { loadConfig } from "../lib/config";
+import { loadConfig, type GlobalConfig } from "../lib/config";
 import { reset as resetRun } from "../lib/docker/orchestrator";
 import { FiberClient } from "../lib/fiber/client";
 import { subscribePayments, type PaymentWatcher } from "../lib/fiber/subscribe";
@@ -84,9 +84,9 @@ function lastSendPayment(store: RunLogStore): StepRecord | undefined {
 
 export async function setupScenario(
   input: string | ScenarioInput,
-  options: { keep?: boolean } = {},
+  options: { keep?: boolean; config?: Partial<GlobalConfig> } = {},
 ): Promise<ScenarioContext> {
-  const config = loadConfig();
+  const config = loadConfig(process.env, process.cwd(), options.config);
   const { scenario, up, store, runtime, expectation } = await runScenario(input, config, options);
   const client = new FiberClient({ endpoints: up.endpoints, logger: store.recordRpc });
 

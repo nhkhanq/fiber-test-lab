@@ -2,3 +2,4 @@
 *.Dockerfile text eol=lf
 Dockerfile text eol=lf
 cli/index.ts text eol=lf
+bin/fiber-lab.mjs text eol=lf
