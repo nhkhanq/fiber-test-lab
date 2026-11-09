@@ -67,10 +67,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # npm trusted publishing needs npm 11.5.1 or later, which comes with Node 24.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
+          package-manager-cache: false
       - run: npm ci
       - name: Publish
         env:

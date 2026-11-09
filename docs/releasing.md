@@ -22,13 +22,16 @@ Quy tắc nằm ở `lib/release.ts`. `test/unit/release.test.ts` kiểm tra ver
 
 ## Cấu hình một lần
 
-Trên npmjs.com, vào package `fiber-test-lab`, mục Settings, phần Trusted Publisher, chọn GitHub Actions và điền:
+Chỉ làm bước này khi đã sẵn sàng đẩy tag: cấu hình mới phải có một lần publish thành công trong 2 ngày, nếu không sẽ hết hạn và phải xóa đi tạo lại.
+
+Trên npmjs.com, vào Packages, chọn `fiber-test-lab`, Settings, Trusted publishing, chọn GitHub Actions và điền đúng chữ hoa chữ thường:
 
 - Organization or user: `nhkhanq`
 - Repository: `fiber-test-lab`
 - Workflow filename: `release.yml`
+- Allowed actions: phải có `npm publish`
 
-Từ đó workflow publish bằng OIDC, không cần lưu token.
+npm không kiểm tra các trường này lúc lưu, nên điền sai chỉ lộ ra khi workflow publish. Từ đó workflow publish bằng OIDC, không cần lưu token, và npm tự kèm provenance.
 
 Hai bản 1.x nên được đánh dấu lỗi thời một lần, sau khi đã `npm login`:
 
