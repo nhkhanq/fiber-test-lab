@@ -384,7 +384,9 @@ export const ScenarioSchema = z
         message: `expect describes the outcome of the scenario's payments, but its seed has no send_payment step — nothing would be checked`,
       });
     }
-    if (scenario.expect === undefined && !scenario.seed.some((s) => s.expect !== undefined)) {
+    // No seed at all means an environment for something else to test against; a seed that acts
+    // without checking anything is a scenario that could never fail.
+    if (scenario.seed.length > 0 && scenario.expect === undefined && !scenario.seed.some((s) => s.expect !== undefined)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["expect"],

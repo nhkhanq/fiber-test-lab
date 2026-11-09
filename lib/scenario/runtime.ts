@@ -212,12 +212,16 @@ export class ScenarioRuntime {
 
   /** Learn each node's identity, and any UDT an earlier `up` minted (for `fiber-lab seed`). */
   async init(): Promise<void> {
+    // A control command attaches to a run in whatever state the last one left it.
+    for (const step of this.#store.data.steps) {
+      const target = (step.input as { node?: string } | null)?.node;
+      if (target === undefined) continue;
+      if (step.action === "kill_node" || step.action === "pause_node") this.#offline.add(target);
+      if (step.action === "start_node" || step.action === "resume_node") this.#offline.delete(target);
+    }
+
     for (const node of this.#scenario.nodes) {
-      const info = (await this.#client.rawCall(node, "node_info")) as {
-        pubkey: string;
-        addresses: string[];
-        default_funding_lock_script: LockScript;
-      };
+      const info = await this.#nodeInfo(node);
       // Prefer /dns4/<node>/... (resolves via docker DNS) — addresses[0] is often 0.0.0.0, which isn't dial-able.
       const address = info.addresses.find((a) => a.startsWith("/dns4/")) ?? info.addresses[0] ?? "";
       this.#nodes[node] = { pubkey: info.pubkey, address, lock: info.default_funding_lock_script };
@@ -228,6 +232,15 @@ export class ScenarioRuntime {
       const script = (step.result as { script?: UdtScript } | null)?.script;
       if (node !== undefined && script !== undefined) this.#udtByNode.set(node, script);
     }
+  }
+
+  /** A node that is down cannot be asked, so fall back on what it said when it was up. */
+  async #nodeInfo(node: string): Promise<{ pubkey: string; addresses: string[]; default_funding_lock_script: LockScript }> {
+    type Info = { pubkey: string; addresses: string[]; default_funding_lock_script: LockScript };
+    if (!this.#offline.has(node)) return (await this.#client.rawCall(node, "node_info")) as Info;
+    const logged = this.#store.data.rpcCalls.find((r) => r.node === node && r.method === "node_info" && r.response !== null);
+    if (logged === undefined) throw new Error(`"${node}" is down and the run-log has no record of it`);
+    return logged.response as Info;
   }
 
   #node(name: string): ResolvedNode {
@@ -328,7 +341,7 @@ export class ScenarioRuntime {
     const step = this.#store.beginStep("open_channel", { from, to, capacity, asset });
     try {
       step.update({ stage: "connecting to peer" });
-      await this.#client.connectPeer(from, { address: peer.address });
+      await this.#client.rawCall(from, "connect_peer", [{ address: peer.address }]);
       await this.#poll(async () => ((await this.#isConnected(from, to)) ? true : null), `${from} to connect to ${to}`);
 
       const known = new Set(this.#channelsWithPeer(await this.#listChannels(from), to).map((c) => c.channel_id));
@@ -381,6 +394,11 @@ export class ScenarioRuntime {
   /** Open the scenario's declared channels (`fiber-lab up`). */
   async openDeclaredChannels(): Promise<void> {
     for (const channel of this.#scenario.channels) await this.#open(channel);
+    if (this.#scenario.channels.length === 0) return;
+    // A client outside the lab sends its first payment the moment `up` returns.
+    const step = this.#store.beginStep("graph_sync", { nodes: this.#scenario.nodes });
+    for (const node of this.#scenario.nodes) await this.#waitForGraph(node);
+    step.end({ synced: true });
   }
 
   /** Open a channel the scenario did not declare. */

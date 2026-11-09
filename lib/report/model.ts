@@ -149,6 +149,8 @@ function describeStep(step: StepRecord): string {
     case "disconnect_peer":
     case "connect_peer":
       return `${input.from} → ${input.to}`;
+    case "graph_sync":
+      return "gossip reached every node";
     case "assert": {
       const passed = (step.checks ?? []).filter((c) => c.match).length;
       return `${passed}/${step.checks?.length ?? 0} checks passed`;

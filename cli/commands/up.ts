@@ -2,6 +2,7 @@ import type { Command } from "commander";
 import { loadConfig } from "../../lib/config";
 import { EXIT_CODES } from "../../lib/constants";
 import { CliError } from "../../lib/errors";
+import { describeEnvironment } from "../../lib/scenario/environment";
 import { runScenario } from "../../lib/scenario/run";
 import { describeMismatch } from "../../lib/scenario/verify";
 
@@ -25,7 +26,8 @@ export function registerUpCommand(program: Command): void {
       }
 
       if (opts.json) {
-        console.log(JSON.stringify({ runId: up.runId, network: up.network, nodes: store.data.nodes }, null, 2));
+        const environment = describeEnvironment(store.data);
+        console.log(JSON.stringify({ runId: up.runId, network: up.network, nodes: store.data.nodes, environment }, null, 2));
       } else {
         console.log(up.runId);
       }

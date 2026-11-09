@@ -15,6 +15,7 @@ import {
   renderComposeYaml,
   type ComposeProject,
 } from "../../topology/compose.template";
+import { assertDockerReady } from "./doctor";
 import { docker, DockerError, type DockerResult, type LineHandler } from "./exec";
 import { ensureImages, type LabImages } from "./images";
 
@@ -285,7 +286,7 @@ async function startChain(run: RunContext, project: ComposeProject): Promise<{ c
     const genesis = await chain.genesis();
     const tip = await chain.mine(1);
     await chain.syncIndexer();
-    step.end({ genesis: genesis.hash, tip: tip.toString() });
+    step.end({ genesis: genesis.hash, tip: tip.toString(), facts: genesis });
     return { chain, genesis };
   } catch (error) {
     step.end({ error: error instanceof Error ? error.message : String(error) });
@@ -332,6 +333,7 @@ export async function up(
   config: GlobalConfig,
   opts: { keep?: boolean } = {},
 ): Promise<UpResult> {
+  await assertDockerReady();
   const runId = await uniqueRunId(config);
   const network = networkName(config, runId);
   const nodes: NodeRecord[] = [CKB_SERVICE, ...scenario.nodes].map((name) => ({
