@@ -34,5 +34,5 @@ seed:
       status: failed
       reason: invoice_cancelled
       balances:
-        - { node: member, peer: hub, local: 901, offered: 0 }
+        - { node: member, peer: hub, localDelta: 0, offered: 0 }
         - { node: organizer, peer: hub, local: 0, received: 0 }

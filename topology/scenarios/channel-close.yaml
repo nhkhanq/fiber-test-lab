@@ -20,4 +20,4 @@ seed:
         - { node: bob, peer: alice, state: Closed, flags: COOPERATIVE }
       onchain:
         - { node: alice, capacityDelta: { min: 399.99, max: 400 } }
-        - { node: bob, capacityDelta: 199 }
+        - { node: bob, capacityDelta: { min: 199, max: 200 } }

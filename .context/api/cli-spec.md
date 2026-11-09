@@ -59,6 +59,8 @@ Print what a client in any language needs to use a run, read from its run-log: e
 
 ### `fiber-lab doctor [--json]`
 Check Node.js, the Docker daemon and Compose. Exit code `2` if any is missing.
+### `fiber-lab images [--json]`
+Build or pull the images for the configured versions without starting anything. `--json` prints their names.
 
 ### `fiber-lab logs <run-id> [--json] [--rpc] [--html [path]]`
 Print the run-log.

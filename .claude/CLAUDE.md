@@ -47,7 +47,7 @@ Two-tier config: per-scenario settings live in each `scenarios/<name>.yaml`; glo
 
 - **TypeScript strict**, run directly via `tsx` — **there is no build step and no `dist`** for anything that runs: `files:` ships source, and `bin/fiber-lab.mjs` and the `entry.mjs` files register `tsx` and import it. Keep it that way; it is why the viewer is vanilla rather than a bundled framework app. The one generated output is `types/`, the `.d.ts` files consuming projects compile against, emitted by `prepare`.
 - Package manager: `npm` (single package, no workspace). Test framework: **Vitest**.
-- CLI: `fiber-lab up|seed|test|env|node|peer|chain|channel|doctor|reset|logs|list|ui`. Every command supports `--json` for CI. Exit codes: `0` ok, `1` config/validation error, `2` runtime (docker/RPC) error, `3` expectation mismatch.
+- CLI: `fiber-lab up|seed|test|images|env|node|peer|chain|channel|doctor|reset|logs|list|ui`. Every command supports `--json` for CI. Exit codes: `0` ok, `1` config/validation error, `2` runtime (docker/RPC) error, `3` expectation mismatch.
 - Day to day:
   - `npm run lab -- <command>` — the CLI from source (e.g. `npm run lab -- up direct-channel`)
   - `npm run ui` — the run viewer, opens a browser

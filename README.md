@@ -403,6 +403,14 @@ fiber-lab doctor [--json]
 ```
 
 Checks Node.js, the Docker daemon and Compose, and exits 2 if any of them is missing.
+### images
+
+```bash
+fiber-lab images [--json]
+```
+
+Builds or pulls the images for the configured versions without starting anything, so a slow download
+happens ahead of time. `--json` prints their names.
 
 ### logs
 
@@ -1089,6 +1097,10 @@ To test against another FNN release, set the action's `fnn-version` input, or th
 `FIBER_LAB_FNN_VERSION` environment variable anywhere else. To pull prebuilt images instead of
 building them, set `image-registry` or `FIBER_LAB_IMAGE_REGISTRY`; a missing image falls back to a
 local build. The `Publish images` workflow pushes `linux/amd64` and `linux/arm64` images to GHCR.
+
+The action caches the images between runs, so the FNN release is only downloaded when a version or
+the image definition changes. With `prepare-only: "true"` it installs the lab and gets the images,
+then stops, for a job that runs its own tests next.
 
 ## License
 

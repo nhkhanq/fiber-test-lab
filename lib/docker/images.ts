@@ -56,6 +56,16 @@ export function imageTags(fnnVersion: string, digest: string): LabImages {
   };
 }
 
+/** BuildKit ends its output by echoing the Dockerfile, so the last lines never say what went wrong.
+ *  The failing step's own output sits between the first pair of dashed rules. */
+export function buildFailureCause(stderr: string): string {
+  const lines = stderr.trim().split(/\r?\n/);
+  const start = lines.indexOf("------");
+  const end = start === -1 ? -1 : lines.indexOf("------", start + 1);
+  const cause = end === -1 ? lines.slice(-12) : lines.slice(start + 1, end).slice(-10);
+  return cause.map((line) => line.slice(0, 240)).join("\n");
+}
+
 async function imageExists(tag: string): Promise<boolean> {
   return (await docker(["image", "inspect", "--format", "{{.Id}}", tag])).code === 0;
 }
@@ -83,10 +93,7 @@ async function buildImage(tag: string, dockerfile: string, config: GlobalConfig,
     ],
     onLine,
   );
-  if (result.code !== 0) {
-    const tail = result.stderr.trim().split("\n").slice(-12).join("\n");
-    throw new DockerError(`docker build failed for ${tag}:\n${tail}`, result.stderr);
-  }
+  if (result.code !== 0) throw new DockerError(`docker build failed for ${tag}:\n${buildFailureCause(result.stderr)}`, result.stderr);
 }
 
 /** Images are shared by every run of the same versions: built once, never per run. */

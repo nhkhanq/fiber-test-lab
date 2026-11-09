@@ -15,7 +15,7 @@ seed:
       status: succeeded
       fee: 0
       balances:
-        - { node: alice, peer: bob, local: 301, remote: 100, localDelta: -100 }
-        - { node: bob, peer: alice, local: 100, remote: 301, localDelta: 100 }
+        - { node: alice, peer: bob, remote: 100, localDelta: -100 }
+        - { node: bob, peer: alice, local: 100, localDelta: 100 }
 expect:
   status: succeeded

@@ -37,6 +37,7 @@ and `@ckb-ccc/fiber` versions recorded in [`docs/scenario-catalog.md`](docs/scen
   `chain` and `channel` let a test in any language describe a run and force states on it, with a Python
   example. A project can have its own `fiber-lab.config.json`, and a scenario with no seed is an
   environment for an application to run against. `fiber-lab doctor` checks the machine.
+- `fiber-lab images` builds or pulls the images ahead of time, and the GitHub Action caches them.
 - **Up to 5 nodes per scenario**, with a warning above 3; genesis now funds 6 accounts.
 - A Docker-free unit suite: `npm run test:unit`. `npm run test:integration` runs the rest.
 - `reset --images` deletes the images the lab has built.
